@@ -4,3 +4,43 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full", "signal"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+
+# gRPC
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+
+# xDS API types
+xds-api = { version = "0.2", features = ["pbjson"] }
+
+# ACME
+instant-acme = "0.7"
+
+# Certificate generation
+rcgen = "0.13"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# X.509 parsing (for expiry checking)
+x509-parser = "0.16"
+
+# Async utilities
+async-stream = "0.3"
+futures = "0.3"
