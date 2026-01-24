@@ -62,7 +62,7 @@ services:
     image: docker.io/envoyproxy/envoy:v1.32-latest
     command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
     volumes:
-      - xds-data:/var/lib/envoy-acme-xds:ro
+      - xds-data:/var/lib/envoy-acme-xds
       - ./test/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
       - "8080:80"    # HTTP (for ACME challenges)
