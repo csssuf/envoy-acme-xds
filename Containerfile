@@ -38,7 +38,7 @@ RUN mkdir -p /var/lib/envoy-acme-xds /var/run /etc/envoy-acme-xds /usr/local/sha
 COPY --from=builder /app/target/release/envoy-acme-xds /usr/local/bin/envoy-acme-xds
 
 # Script to install custom CA and run the server
-# Runs as root to install CA, then drops privileges to app user
+# Runs as root to install CA and fix permissions, then drops privileges to app user
 COPY --chmod=755 <<'EOF' /usr/local/bin/entrypoint.sh
 #!/bin/bash
 set -e
@@ -48,6 +48,9 @@ if [ -f /etc/envoy-acme-xds/ca.pem ]; then
     cp /etc/envoy-acme-xds/ca.pem /usr/local/share/ca-certificates/custom-ca.crt
     update-ca-certificates 2>/dev/null || true
 fi
+
+# Fix permissions on mounted volumes (they're mounted as root)
+chown -R app:app /var/lib/envoy-acme-xds /var/run 2>/dev/null || true
 
 # Drop privileges and run the application
 exec gosu app /usr/local/bin/envoy-acme-xds "$@"
