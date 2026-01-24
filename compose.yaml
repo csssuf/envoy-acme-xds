@@ -2,7 +2,6 @@
 #
 # Services:
 #   - pebble: ACME test server (Let's Encrypt's official test server)
-#   - challtestsrv: DNS/challenge test server for Pebble validation
 #   - xds-server: The envoy-acme-xds server (this project)
 #   - envoy: Envoy proxy configured to use the XDS server
 #
@@ -21,24 +20,15 @@ volumes:
   xds-data:
 
 services:
-  # Challenge test server - provides DNS resolution and challenge response for Pebble
-  challtestsrv:
-    image: ghcr.io/letsencrypt/pebble-challtestsrv:latest
-    command: pebble-challtestsrv -defaultIPv4 envoy
-    networks:
-      test-net:
-        aliases:
-          - challtestsrv
-
   # Pebble ACME server
   pebble:
     image: ghcr.io/letsencrypt/pebble:latest
-    command: pebble -config /test/config/pebble-config.json -strict -dnsserver challtestsrv:8053
+    command: pebble -config /test/config/pebble-config.json
     environment:
       # Skip sleep delays during validation
       PEBBLE_VA_NOSLEEP: "1"
-      # Generate alternate root certificates
-      PEBBLE_ALTERNATE_ROOTS: "1"
+      # Always consider challenges valid (for testing without real validation)
+      PEBBLE_VA_ALWAYS_VALID: "1"
     volumes:
       - ./test/pebble:/test/config:ro
       - ./certificates:/test/certs:ro
@@ -49,8 +39,6 @@ services:
       test-net:
         aliases:
           - pebble
-    depends_on:
-      - challtestsrv
 
   # XDS server (this project)
   xds-server:
