@@ -23,7 +23,7 @@ volumes:
 services:
   # Challenge test server - provides DNS resolution and challenge response for Pebble
   challtestsrv:
-    image: docker.io/letsencrypt/pebble-challtestsrv:latest
+    image: ghcr.io/letsencrypt/pebble-challtestsrv:latest
     command: pebble-challtestsrv -defaultIPv4 envoy -defaultIPv6 ""
     networks:
       test-net:
@@ -32,7 +32,7 @@ services:
 
   # Pebble ACME server
   pebble:
-    image: docker.io/letsencrypt/pebble:latest
+    image: ghcr.io/letsencrypt/pebble:latest
     command: pebble -config /test/config/pebble-config.json -strict -dnsserver challtestsrv:8053
     environment:
       # Skip sleep delays during validation
