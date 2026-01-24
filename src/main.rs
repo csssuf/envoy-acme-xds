@@ -151,7 +151,13 @@ async fn run(config: Config) -> error::Result<()> {
 
     // Run XDS server
     let server = XdsServer::new(xds_state);
-    server.run(&config.meta.socket_path, shutdown).await?;
+    server
+        .run(
+            &config.meta.socket_path,
+            config.meta.socket_permissions,
+            shutdown,
+        )
+        .await?;
 
     info!("Shutdown complete");
     Ok(())

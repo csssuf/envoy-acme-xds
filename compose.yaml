@@ -49,7 +49,7 @@ services:
       - ./test/xds-config.yaml:/etc/envoy-acme-xds/config.yaml:ro
       - ./certificates/pebble-ca.pem:/etc/envoy-acme-xds/ca.pem:ro
     environment:
-      RUST_LOG: "envoy_acme_xds=debug,info"
+      RUST_LOG: "envoy_acme_xds=debug,tower=debug,tonic=debug,h2=debug,info"
     networks:
       test-net:
         aliases:

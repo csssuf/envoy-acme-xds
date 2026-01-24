@@ -1,3 +1,4 @@
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -27,7 +28,15 @@ impl XdsServer {
     }
 
     /// Run the XDS server on a Unix domain socket
-    pub async fn run(self, socket_path: &Path, shutdown: impl std::future::Future<Output = ()>) -> Result<()> {
+    ///
+    /// The `socket_permissions` parameter specifies the Unix permissions for the socket file
+    /// (e.g., 0o777 for world-writable, allowing any process to connect).
+    pub async fn run(
+        self,
+        socket_path: &Path,
+        socket_permissions: u32,
+        shutdown: impl std::future::Future<Output = ()>,
+    ) -> Result<()> {
         // Remove existing socket file if it exists
         if socket_path.exists() {
             std::fs::remove_file(socket_path)?;
@@ -40,9 +49,18 @@ impl XdsServer {
 
         // Bind to Unix socket
         let uds = UnixListener::bind(socket_path)?;
+
+        // Set socket permissions to allow other processes to connect
+        let permissions = std::fs::Permissions::from_mode(socket_permissions);
+        std::fs::set_permissions(socket_path, permissions)?;
+
         let uds_stream = UnixListenerStream::new(uds);
 
-        info!(path = %socket_path.display(), "XDS server listening on Unix socket");
+        info!(
+            path = %socket_path.display(),
+            permissions = format!("{:#o}", socket_permissions),
+            "XDS server listening on Unix socket"
+        );
 
         // Create services
         let lds_service = LdsService::new(self.state.clone());

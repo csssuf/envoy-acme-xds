@@ -22,6 +22,15 @@ pub struct MetaConfig {
 
     /// Unix socket path for xDS server
     pub socket_path: PathBuf,
+
+    /// Unix socket permissions in octal (e.g., 0o777 for world-writable)
+    /// Defaults to 0o777 to allow any process to connect
+    #[serde(default = "default_socket_permissions")]
+    pub socket_permissions: u32,
+}
+
+fn default_socket_permissions() -> u32 {
+    0o777
 }
 
 fn default_acme_directory() -> String {
