@@ -23,7 +23,7 @@ services:
   # Pebble ACME server
   pebble:
     image: ghcr.io/letsencrypt/pebble:latest
-    command: pebble -config /test/config/pebble-config.json
+    command: ["-config", "/test/config/pebble-config.json"]
     environment:
       # Skip sleep delays during validation
       PEBBLE_VA_NOSLEEP: "1"
@@ -62,7 +62,7 @@ services:
   # Envoy proxy
   envoy:
     image: docker.io/envoyproxy/envoy:v1.32-latest
-    command: envoy -c /etc/envoy/envoy.yaml --log-level info
+    command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
     volumes:
       - xds-socket:/var/run
       - ./test/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
