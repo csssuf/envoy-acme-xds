@@ -24,7 +24,7 @@ services:
   # Challenge test server - provides DNS resolution and challenge response for Pebble
   challtestsrv:
     image: ghcr.io/letsencrypt/pebble-challtestsrv:latest
-    command: pebble-challtestsrv -defaultIPv4 envoy -defaultIPv6 ""
+    command: pebble-challtestsrv -defaultIPv4 envoy
     networks:
       test-net:
         aliases:
