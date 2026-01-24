@@ -49,4 +49,4 @@ static_resources:
               - endpoint:
                   address:
                     pipe:
-                      path: /var/run/envoy-xds.sock
+                      path: /var/lib/envoy-acme-xds/envoy-xds.sock

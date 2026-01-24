@@ -50,7 +50,7 @@ if [ -f /etc/envoy-acme-xds/ca.pem ]; then
 fi
 
 # Fix permissions on mounted volumes (they're mounted as root)
-chown -R app:app /var/lib/envoy-acme-xds /var/run 2>/dev/null || true
+chown -R app:app /var/lib/envoy-acme-xds 2>/dev/null || true
 
 # Drop privileges and run the application
 exec gosu app /usr/local/bin/envoy-acme-xds "$@"

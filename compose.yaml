@@ -16,7 +16,6 @@ networks:
     driver: bridge
 
 volumes:
-  xds-socket:
   xds-data:
 
 services:
@@ -46,7 +45,6 @@ services:
       context: .
       dockerfile: Containerfile
     volumes:
-      - xds-socket:/var/run
       - xds-data:/var/lib/envoy-acme-xds
       - ./test/xds-config.yaml:/etc/envoy-acme-xds/config.yaml:ro
       - ./certificates/pebble-ca.pem:/etc/envoy-acme-xds/ca.pem:ro
@@ -64,7 +62,7 @@ services:
     image: docker.io/envoyproxy/envoy:v1.32-latest
     command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
     volumes:
-      - xds-socket:/var/run
+      - xds-data:/var/lib/envoy-acme-xds:ro
       - ./test/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
       - "8080:80"    # HTTP (for ACME challenges)

@@ -10,7 +10,7 @@ meta:
   storage_dir: /var/lib/envoy-acme-xds
 
   # Unix socket path for the XDS gRPC server (shared with Envoy container)
-  socket_path: /var/run/envoy-xds.sock
+  socket_path: /var/lib/envoy-acme-xds/envoy-xds.sock
 
   # Pebble ACME directory URL
   acme_directory_url: https://pebble:14000/dir
