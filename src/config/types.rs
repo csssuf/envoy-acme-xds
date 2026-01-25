@@ -27,10 +27,19 @@ pub struct MetaConfig {
     /// Defaults to 0o777 to allow any process to connect
     #[serde(default = "default_socket_permissions")]
     pub socket_permissions: u32,
+
+    /// Port for HTTP-01 ACME challenge validation (defaults to 80)
+    /// Set this to match your HTTP listener port
+    #[serde(default = "default_acme_challenge_port")]
+    pub acme_challenge_port: u16,
 }
 
 fn default_socket_permissions() -> u32 {
     0o777
+}
+
+fn default_acme_challenge_port() -> u16 {
+    80
 }
 
 fn default_acme_directory() -> String {

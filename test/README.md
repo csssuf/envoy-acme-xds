@@ -25,6 +25,37 @@ This directory contains the configuration and scripts needed to run a fully cont
 ./test/run-test.sh --rebuild
 ```
 
+## Cleanup
+
+Reset test environment to clean state:
+
+```bash
+# Standard cleanup - removes issued certificates, keeps Pebble CA
+./test/cleanup.sh
+
+# Full cleanup - removes everything including Pebble CA
+./test/cleanup.sh --full
+```
+
+The cleanup script:
+- Stops all containers
+- Removes xds-data volume (ACME account + issued certificates)
+- Optionally: Removes Pebble CA certificates (with --full)
+
+## Verification
+
+Verify real ACME validation is working:
+
+```bash
+./test/verify-validation.sh
+```
+
+This checks:
+- PEBBLE_VA_ALWAYS_VALID is disabled
+- DNS is configured in Pebble container
+- Pebble can reach Envoy
+- Validation attempts appear in logs
+
 ## Manual Setup
 
 ### 1. Generate Test Certificates
@@ -81,12 +112,22 @@ podman compose down
     (Pebble validates challenges via Envoy)
 ```
 
+### DNS Configuration
+
+Test domains resolve via `extra_hosts` in Pebble container:
+- site-a.example.com → envoy:5001
+- www.site-a.example.com → envoy:5001
+- site-b.example.com → envoy:5001
+- api.example.com → envoy:5001
+
+Pebble performs **real HTTP-01 validation** by making actual HTTP requests to Envoy on port 5001 (Pebble's default validation port).
+
 ### Service Details
 
 | Service | Port | Description |
 |---------|------|-------------|
 | xds-server | Unix socket | XDS control plane (LDS, CDS, SDS) |
-| envoy | 8080 (HTTP), 8443 (HTTPS), 9901 (Admin) | Envoy proxy |
+| envoy | 5001 (HTTP internal), 8080 (HTTP host), 8443 (HTTPS), 9901 (Admin) | Envoy proxy |
 | pebble | 14000 (ACME), 15000 (Management) | ACME test server |
 | challtestsrv | - | DNS/challenge test server |
 
@@ -134,11 +175,13 @@ podman compose logs -f xds-server
 
 ## Test Configuration
 
-The test uses these domains (mocked via challtestsrv):
-- `test.example.com`
-- `www.test.example.com`
+The test uses these domains:
+- `site-a.example.com`
+- `www.site-a.example.com`
+- `site-b.example.com`
+- `api.example.com`
 
-Pebble's challtestsrv is configured to resolve all domains to the `envoy` container, enabling HTTP-01 challenge validation.
+Domain resolution is configured via `extra_hosts` in the Pebble container, mapping all test domains to the `envoy` service. Pebble performs real HTTP-01 validation by connecting to `envoy:5001`.
 
 ## Files
 
@@ -147,6 +190,8 @@ test/
 ├── README.md              # This file
 ├── generate-certs.sh      # Certificate generation script
 ├── run-test.sh            # Integration test runner
+├── cleanup.sh             # Cleanup and reset script
+├── verify-validation.sh   # Verification script for real ACME validation
 ├── xds-config.yaml        # XDS server configuration
 ├── envoy/
 │   └── envoy.yaml         # Envoy bootstrap configuration

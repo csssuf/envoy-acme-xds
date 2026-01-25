@@ -81,8 +81,12 @@ async fn run(config: Config) -> error::Result<()> {
     let workload_clusters = ConfigMerger::parse_clusters(&config.envoy)?;
 
     // Merge initial listeners (no challenges yet)
-    let merged_listeners =
-        ConfigMerger::merge_listeners(workload_listeners.clone(), &challenge_state).await;
+    let merged_listeners = ConfigMerger::merge_listeners(
+        workload_listeners.clone(),
+        &challenge_state,
+        config.meta.acme_challenge_port,
+    )
+    .await;
 
     xds_state.update_listeners(merged_listeners).await;
     xds_state.update_clusters(workload_clusters).await;
@@ -103,12 +107,14 @@ async fn run(config: Config) -> error::Result<()> {
     let state_updater_xds = xds_state.clone();
     let state_updater_challenges = challenge_state.clone();
     let state_updater_workload = workload_listeners.clone();
+    let state_updater_acme_port = config.meta.acme_challenge_port;
     tokio::spawn(async move {
         let mut rx = state_updater_xds.subscribe();
         while rx.recv().await.is_ok() {
             let merged = ConfigMerger::merge_listeners(
                 state_updater_workload.clone(),
                 &state_updater_challenges,
+                state_updater_acme_port,
             )
             .await;
             // Update without triggering another notification (would cause loop)

@@ -12,6 +12,10 @@ meta:
   # Pebble ACME directory URL
   acme_directory_url: https://pebble:14000/dir
 
+  # Port for HTTP-01 ACME challenge validation
+  # Must match the HTTP listener port and Pebble's configured httpPort
+  acme_challenge_port: 5001
+
 # Test certificates to obtain from Pebble
 certificates:
   - name: site-a
@@ -30,13 +34,14 @@ certificates:
 # Envoy configuration
 envoy:
   listeners:
-    # HTTP listener on port 8080 - ACME challenge routes will be automatically prepended
-    # Note: Using 8080 instead of 80 to avoid requiring elevated privileges
+    # HTTP listener on port 5001 - ACME challenge routes will be automatically prepended
+    # Note: Using port 5001 for ACME HTTP-01 validation (Pebble's default validation port)
+    # External access via host port 8080 (mapped in compose.yaml as 8080:5001)
     - name: http_listener
       address:
         socket_address:
           address: 0.0.0.0
-          port_value: 8080
+          port_value: 5001
       filter_chains:
         - filters:
             - name: envoy.filters.network.http_connection_manager

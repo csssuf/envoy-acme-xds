@@ -14,6 +14,9 @@
 networks:
   test-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
 
 volumes:
   xds-data:
@@ -26,8 +29,11 @@ services:
     environment:
       # Skip sleep delays during validation
       PEBBLE_VA_NOSLEEP: "1"
-      # Always consider challenges valid (for testing without real validation)
-      PEBBLE_VA_ALWAYS_VALID: "1"
+    extra_hosts:
+      - "site-a.example.com:172.28.0.10"
+      - "www.site-a.example.com:172.28.0.10"
+      - "site-b.example.com:172.28.0.10"
+      - "api.example.com:172.28.0.10"
     volumes:
       - ./test/pebble:/test/config:ro
       - ./certificates:/test/certs:ro
@@ -66,11 +72,12 @@ services:
       - xds-data:/var/lib/envoy-acme-xds
       - ./test/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
-      - "8080:8080"  # HTTP (for ACME challenges)
+      - "8080:5001"  # HTTP (for ACME challenges) - host:container
       - "8443:8443"  # HTTPS
       - "9901:9901"  # Admin interface
     networks:
       test-net:
+        ipv4_address: 172.28.0.10
         aliases:
           - envoy
     depends_on:

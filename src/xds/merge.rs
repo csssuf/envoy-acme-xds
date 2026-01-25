@@ -42,6 +42,7 @@ impl ConfigMerger {
     pub async fn merge_listeners(
         workload_listeners: Vec<Listener>,
         challenge_state: &ChallengeState,
+        acme_challenge_port: u16,
     ) -> Vec<Listener> {
         let challenges = challenge_state.get_all().await;
 
@@ -60,18 +61,20 @@ impl ConfigMerger {
             "Merging ACME challenge routes"
         );
 
-        // Find port 80 listener or create one
+        // Find HTTP listener on configured ACME challenge port or create one
         let mut listeners = workload_listeners;
-        let port_80_idx = listeners.iter().position(|l| listener_port(l) == Some(80));
+        let acme_port_idx = listeners
+            .iter()
+            .position(|l| listener_port(l) == Some(acme_challenge_port as u32));
 
-        match port_80_idx {
+        match acme_port_idx {
             Some(idx) => {
                 // Prepend ACME routes to existing listener
                 listeners[idx] = Self::prepend_routes_to_listener(&listeners[idx], acme_routes);
             }
             None => {
-                // Create new port 80 listener for ACME challenges
-                let acme_listener = Self::create_acme_listener(acme_routes);
+                // Create new listener on configured port for ACME challenges
+                let acme_listener = Self::create_acme_listener(acme_routes, acme_challenge_port);
                 listeners.push(acme_listener);
             }
         }
@@ -139,8 +142,8 @@ impl ConfigMerger {
         }
     }
 
-    /// Create a new listener for ACME challenges on port 80
-    fn create_acme_listener(routes: Vec<Route>) -> Listener {
+    /// Create a new listener for ACME challenges on the configured port
+    fn create_acme_listener(routes: Vec<Route>, port: u16) -> Listener {
         let route_config = RouteConfiguration {
             name: "acme_routes".to_string(),
             virtual_hosts: vec![VirtualHost {
@@ -174,7 +177,7 @@ impl ConfigMerger {
                         SocketAddress {
                             address: "0.0.0.0".to_string(),
                             port_specifier: Some(
-                                xds_api::pb::envoy::config::core::v3::socket_address::PortSpecifier::PortValue(80),
+                                xds_api::pb::envoy::config::core::v3::socket_address::PortSpecifier::PortValue(port as u32),
                             ),
                             ..Default::default()
                         },
