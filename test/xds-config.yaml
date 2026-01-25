@@ -1,9 +1,6 @@
-# Test configuration for envoy-acme-xds
+# Test configuration with multiple certificates and domain-based routing
+# Exercises LDS (listener delivery), SDS (certificate delivery), and SNI-based filter chain matching
 # Used in containerized test environment with Pebble ACME server
-#
-# Note: Listener/cluster configs with typed_config are not yet supported
-# due to protobuf Any serialization complexity. The XDS server will
-# create default listeners for ACME challenges.
 
 meta:
   # Directory for storing ACME account credentials and certificates
@@ -17,12 +14,189 @@ meta:
 
 # Test certificates to obtain from Pebble
 certificates:
-  - name: test-cert
+  - name: site-a
     domains:
-      - test.example.com
-      - www.test.example.com
+      - site-a.example.com
+      - www.site-a.example.com
 
-# Empty envoy config - the XDS server will create ACME challenge routes
+  - name: site-b
+    domains:
+      - site-b.example.com
+
+  - name: api
+    domains:
+      - api.example.com
+
+# Envoy configuration
 envoy:
-  listeners: []
+  listeners:
+    # HTTP listener on port 8080 - ACME challenge routes will be automatically prepended
+    # Note: Using 8080 instead of 80 to avoid requiring elevated privileges
+    - name: http_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8080
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: http
+                route_config:
+                  name: http_routes
+                  virtual_hosts:
+                    - name: all
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          redirect:
+                            https_redirect: true
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+    # HTTPS listener on port 8443 with SNI-based routing
+    # Note: Using 8443 instead of 443 to avoid requiring elevated privileges in rootless Podman
+    - name: https_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8443
+      listener_filters:
+        - name: envoy.filters.listener.tls_inspector
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
+      filter_chains:
+        # Filter chain for site-a (site-a.example.com, www.site-a.example.com)
+        - filter_chain_match:
+            server_names:
+              - "site-a.example.com"
+              - "www.site-a.example.com"
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificate_sds_secret_configs:
+                  - name: site-a
+                    sds_config:
+                      api_config_source:
+                        api_type: GRPC
+                        transport_api_version: V3
+                        grpc_services:
+                          - envoy_grpc:
+                              cluster_name: xds_cluster
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: site_a
+                route_config:
+                  name: site_a_routes
+                  virtual_hosts:
+                    - name: site_a
+                      domains:
+                        - "site-a.example.com"
+                        - "site-a.example.com:8443"
+                        - "www.site-a.example.com"
+                        - "www.site-a.example.com:8443"
+                      routes:
+                        - match:
+                            prefix: "/"
+                          direct_response:
+                            status: 200
+                            body:
+                              inline_string: "Welcome to Site A!"
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+        # Filter chain for site-b (site-b.example.com)
+        - filter_chain_match:
+            server_names:
+              - "site-b.example.com"
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificate_sds_secret_configs:
+                  - name: site-b
+                    sds_config:
+                      api_config_source:
+                        api_type: GRPC
+                        transport_api_version: V3
+                        grpc_services:
+                          - envoy_grpc:
+                              cluster_name: xds_cluster
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: site_b
+                route_config:
+                  name: site_b_routes
+                  virtual_hosts:
+                    - name: site_b
+                      domains:
+                        - "site-b.example.com"
+                        - "site-b.example.com:8443"
+                      routes:
+                        - match:
+                            prefix: "/"
+                          direct_response:
+                            status: 200
+                            body:
+                              inline_string: "Welcome to Site B - API Gateway"
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+        # Filter chain for api (api.example.com)
+        - filter_chain_match:
+            server_names:
+              - "api.example.com"
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificate_sds_secret_configs:
+                  - name: api
+                    sds_config:
+                      api_config_source:
+                        api_type: GRPC
+                        transport_api_version: V3
+                        grpc_services:
+                          - envoy_grpc:
+                              cluster_name: xds_cluster
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: api
+                route_config:
+                  name: api_routes
+                  virtual_hosts:
+                    - name: api
+                      domains:
+                        - "api.example.com"
+                        - "api.example.com:8443"
+                      routes:
+                        - match:
+                            prefix: "/"
+                          direct_response:
+                            status: 200
+                            body:
+                              inline_string: "API v1.0 - Status: OK"
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
   clusters: []

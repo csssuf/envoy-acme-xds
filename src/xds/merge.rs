@@ -11,7 +11,7 @@ use xds_api::pb::envoy::extensions::filters::network::http_connection_manager::v
 use xds_api::pb::google::protobuf::Any;
 
 use crate::acme::ChallengeState;
-use crate::config::EnvoyWorkloadConfig;
+use crate::config::{deserialize_clusters, deserialize_listener, EnvoyWorkloadConfig};
 use crate::envoy::{build_acme_challenge_route, listener_port};
 use crate::error::{Error, Result};
 
@@ -29,23 +29,13 @@ impl ConfigMerger {
         config
             .listeners
             .iter()
-            .map(|v| {
-                serde_json::from_value(v.clone())
-                    .map_err(|e| Error::Config(format!("Invalid listener config: {}", e)))
-            })
+            .map(|v| deserialize_listener(v))
             .collect()
     }
 
     /// Parse workload clusters from JSON values
     pub fn parse_clusters(config: &EnvoyWorkloadConfig) -> Result<Vec<Cluster>> {
-        config
-            .clusters
-            .iter()
-            .map(|v| {
-                serde_json::from_value(v.clone())
-                    .map_err(|e| Error::Config(format!("Invalid cluster config: {}", e)))
-            })
-            .collect()
+        deserialize_clusters(&config.clusters)
     }
 
     /// Merge ACME challenge routes into listeners

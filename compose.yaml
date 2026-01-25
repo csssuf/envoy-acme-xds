@@ -61,12 +61,13 @@ services:
   envoy:
     image: docker.io/envoyproxy/envoy:v1.32-latest
     command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    user: "0:0"  # Run as root to bind to privileged ports
     volumes:
       - xds-data:/var/lib/envoy-acme-xds
       - ./test/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
     ports:
-      - "8080:80"    # HTTP (for ACME challenges)
-      - "8443:443"   # HTTPS
+      - "8080:8080"  # HTTP (for ACME challenges)
+      - "8443:8443"  # HTTPS
       - "9901:9901"  # Admin interface
     networks:
       test-net:
