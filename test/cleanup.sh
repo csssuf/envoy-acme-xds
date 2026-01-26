@@ -23,9 +23,11 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Parse arguments
 FULL_CLEANUP=false
+AUTO_YES=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --full|-f) FULL_CLEANUP=true; shift ;;
+        --yes|-y) AUTO_YES=true; shift ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -33,6 +35,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --full, -f     Full cleanup - also remove Pebble CA certificates"
+            echo "  --yes, -y      Skip confirmation prompts"
             echo "  --help, -h     Show this help message"
             echo ""
             echo "Standard cleanup:"
@@ -75,13 +78,18 @@ if podman volume exists "${VOLUME_NAME}" 2>/dev/null; then
     log_warn "  - ACME account credentials (account.json)"
     log_warn "  - All issued certificates (certs/)"
 
-    read -p "Continue? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if [[ "${AUTO_YES}" == "true" ]]; then
         podman volume rm "${VOLUME_NAME}"
         log_info "Volume removed"
     else
-        log_info "Skipping volume removal"
+        read -p "Continue? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            podman volume rm "${VOLUME_NAME}"
+            log_info "Volume removed"
+        else
+            log_info "Skipping volume removal"
+        fi
     fi
 else
     log_info "Volume ${VOLUME_NAME} does not exist"
@@ -94,13 +102,18 @@ if [[ "${FULL_CLEANUP}" == "true" ]]; then
         log_warn "Directory: ${CERT_DIR}"
         log_warn "Run ./test/generate-certs.sh before next test"
 
-        read -p "Continue? [y/N] " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if [[ "${AUTO_YES}" == "true" ]]; then
             rm -rf "${CERT_DIR}"/*
             log_info "Pebble CA certificates removed"
         else
-            log_info "Skipping Pebble CA removal"
+            read -p "Continue? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                rm -rf "${CERT_DIR}"/*
+                log_info "Pebble CA certificates removed"
+            else
+                log_info "Skipping Pebble CA removal"
+            fi
         fi
     else
         log_info "No Pebble CA certificates to remove"
