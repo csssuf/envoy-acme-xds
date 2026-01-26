@@ -67,8 +67,15 @@ envoy:
         socket_address:
           address: 0.0.0.0
           port_value: 443
+      listener_filters:
+        - name: envoy.filters.listener.tls_inspector
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
       filter_chains:
-        - transport_socket:
+        # Filter chain for example.com
+        - filter_chain_match:
+            server_names: ["example.com", "www.example.com"]
+          transport_socket:
             name: envoy.transport_sockets.tls
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
@@ -78,6 +85,7 @@ envoy:
                     sds_config:
                       api_config_source:
                         api_type: GRPC
+                        transport_api_version: V3
                         grpc_services:
                           - envoy_grpc:
                               cluster_name: xds_cluster
@@ -85,12 +93,49 @@ envoy:
             - name: envoy.filters.network.http_connection_manager
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-                stat_prefix: ingress_https
+                stat_prefix: ingress_https_example
                 route_config:
-                  name: https_route
+                  name: https_example_route
                   virtual_hosts:
-                    - name: backend
-                      domains: ["*"]
+                    - name: example_backend
+                      domains: ["example.com", "www.example.com"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: backend_cluster
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+        # Filter chain for api.example.com
+        - filter_chain_match:
+            server_names: ["api.example.com"]
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificate_sds_secret_configs:
+                  - name: api
+                    sds_config:
+                      api_config_source:
+                        api_type: GRPC
+                        transport_api_version: V3
+                        grpc_services:
+                          - envoy_grpc:
+                              cluster_name: xds_cluster
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_https_api
+                route_config:
+                  name: https_api_route
+                  virtual_hosts:
+                    - name: api_backend
+                      domains: ["api.example.com"]
                       routes:
                         - match:
                             prefix: "/"
