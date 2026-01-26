@@ -66,8 +66,14 @@ If no tests exist, add them in `src/...` with `#[cfg(test)]` or create
 From repo root:
 
 ```bash
-./test/run-test.sh
+./test/cleanup.sh
+./test/run-test.sh --rebuild
 ```
+
+Notes:
+- Always run `./test/cleanup.sh` before integration tests to clear the `xds-data` volume (ACME account + issued certificates).
+- Always pass `--rebuild` so the xds-server image includes the latest code.
+- `--full` cleanup is not required for routine runs; Pebble CA certificates can be reused.
 
 Useful options:
 
@@ -180,6 +186,13 @@ Prereqs for integration tests:
 
 - Update `src/xds/` services and `src/envoy/` builders.
 - Ensure `XdsState` versioning and notifications are consistent.
+
+## Commit Messages
+
+- Use a concise, lowercase, prefixed subject: `feat: ...`, `fix: ...`, `add: ...`.
+- If more detail is needed, add a blank line and a wrapped body explaining the why and key changes.
+- Use short paragraphs or bullet lists for multi-part changes.
+- Add `Co-Authored-By: Name <email>` trailers when pairing or using assistance.
 
 ## Safety and Hygiene
 
