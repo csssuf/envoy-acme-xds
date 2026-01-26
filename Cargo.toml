@@ -2,6 +2,10 @@
 name = "envoy-acme-xds"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/csssuf/envoy-acme-xds"
+license = "Apache-2.0"
+license-file = "LICENSE"
+description = "Envoy XDS for transparent ACME certificate issuance"
 
 [dependencies]
 # Async runtime
