@@ -1,10 +1,11 @@
 use std::time::Duration;
 
 use instant_acme::{
-    Account, AuthorizationStatus, ChallengeType, Identifier, NewOrder, Order, OrderStatus,
+    Account, AuthorizationStatus, Challenge, ChallengeType, Identifier, NewOrder, Order,
+    OrderStatus, Problem,
 };
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P256_SHA256};
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 
 use crate::error::{Error, Result};
 
@@ -81,17 +82,28 @@ impl CertificateOrder {
                 AuthorizationStatus::Valid => {
                     debug!("Authorization already valid");
                 }
-                status => {
-                    return Err(Error::ChallengeFailed(format!(
-                        "Unexpected authorization status: {:?}",
-                        status
-                    )));
+                AuthorizationStatus::Invalid
+                | AuthorizationStatus::Revoked
+                | AuthorizationStatus::Expired => {
+                    let summary = Self::summarize_challenge_errors(&authz.challenges);
+                    Self::log_challenge_errors(cert_name, &authz.identifier, &authz.challenges);
+                    challenge_state.clear_for_cert(cert_name).await;
+                    return Err(Error::ChallengeFailed(match summary {
+                        Some(summary) => format!(
+                            "Authorization {:?} for {:?} failed: {}",
+                            authz.status, authz.identifier, summary
+                        ),
+                        None => format!(
+                            "Authorization {:?} for {:?} failed without problem details",
+                            authz.status, authz.identifier
+                        ),
+                    }));
                 }
             }
         }
 
         // Notify that challenges are ready (triggers xDS update)
-        if !challenges_to_complete.is_empty() {
+        let challenge_result = if !challenges_to_complete.is_empty() {
             on_challenges_ready();
 
             // Small delay to allow xDS to propagate
@@ -103,11 +115,14 @@ impl CertificateOrder {
             }
 
             // Wait for challenges to complete
-            Self::wait_for_order_ready(&mut order).await?;
-        }
+            Self::wait_for_order_ready(&mut order, cert_name, domains).await
+        } else {
+            Ok(())
+        };
 
-        // Clean up challenges
+        // Clean up challenges even on failure
         challenge_state.clear_for_cert(cert_name).await;
+        challenge_result?;
 
         // Generate CSR
         let (csr_der, key_pair) = Self::generate_csr(domains)?;
@@ -116,7 +131,7 @@ impl CertificateOrder {
         order.finalize(&csr_der).await?;
 
         // Wait for certificate
-        Self::wait_for_order_ready(&mut order).await?;
+        Self::wait_for_order_ready(&mut order, cert_name, domains).await?;
 
         // Get certificate
         let cert_chain_pem = order
@@ -130,21 +145,46 @@ impl CertificateOrder {
     }
 
     /// Wait for order to reach ready/valid state
-    async fn wait_for_order_ready(order: &mut Order) -> Result<()> {
+    async fn wait_for_order_ready(
+        order: &mut Order,
+        cert_name: &str,
+        domains: &[String],
+    ) -> Result<()> {
         let mut delay = Duration::from_secs(1);
         let max_delay = Duration::from_secs(30);
         let max_attempts = 30;
+        let mut last_status = None;
+        let mut last_error: Option<Problem> = None;
 
         for attempt in 1..=max_attempts {
-            let state = order.state();
-            debug!(attempt, status = ?state.status, "Checking order status");
+            let (status, error) = {
+                let state = order.state();
+                debug!(attempt, status = ?state.status, "Checking order status");
+                (state.status, state.error.clone())
+            };
+            last_status = Some(status);
+            last_error = error.clone();
 
-            match state.status {
+            match status {
                 OrderStatus::Ready | OrderStatus::Valid => {
                     return Ok(());
                 }
                 OrderStatus::Invalid => {
-                    return Err(Error::ChallengeFailed("Order became invalid".to_string()));
+                    Self::log_order_problem(cert_name, domains, error.as_ref());
+                    if let Err(err) =
+                        Self::log_authorization_problems(order, cert_name).await
+                    {
+                        warn!(
+                            cert_name,
+                            error = ?err,
+                            "Failed to load authorizations for invalid order"
+                        );
+                    }
+                    let summary = error.as_ref().map(Self::format_problem);
+                    return Err(Error::ChallengeFailed(match summary {
+                        Some(summary) => format!("Order became invalid: {summary}"),
+                        None => "Order became invalid without problem details".to_string(),
+                    }));
                 }
                 OrderStatus::Pending | OrderStatus::Processing => {
                     tokio::time::sleep(delay).await;
@@ -155,9 +195,132 @@ impl CertificateOrder {
             }
         }
 
-        Err(Error::ChallengeFailed(
-            "Order did not complete in time".to_string(),
-        ))
+        Self::log_timeout_problem(cert_name, domains, last_status, last_error.as_ref());
+        Err(Error::ChallengeFailed(match last_status {
+            Some(status) => match last_error.as_ref() {
+                Some(problem) => format!(
+                    "Order did not complete in time (status={:?}): {}",
+                    status,
+                    Self::format_problem(problem)
+                ),
+                None => format!("Order did not complete in time (status={:?})", status),
+            },
+            None => "Order did not complete in time".to_string(),
+        }))
+    }
+
+    async fn log_authorization_problems(order: &mut Order, cert_name: &str) -> Result<()> {
+        let authorizations = order.authorizations().await?;
+        let mut logged = false;
+
+        for authz in &authorizations {
+            if Self::log_challenge_errors(cert_name, &authz.identifier, &authz.challenges) {
+                logged = true;
+            }
+        }
+
+        if !logged {
+            debug!(cert_name, "No challenge errors reported for invalid order");
+        }
+
+        Ok(())
+    }
+
+    fn log_order_problem(cert_name: &str, domains: &[String], problem: Option<&Problem>) {
+        if let Some(problem) = problem {
+            error!(
+                cert_name,
+                ?domains,
+                problem_detail = ?problem.detail,
+                problem_type = ?problem.r#type,
+                problem_status = ?problem.status,
+                "Order became invalid"
+            );
+        } else {
+            error!(cert_name, ?domains, "Order became invalid");
+        }
+    }
+
+    fn log_timeout_problem(
+        cert_name: &str,
+        domains: &[String],
+        last_status: Option<OrderStatus>,
+        problem: Option<&Problem>,
+    ) {
+        if let Some(problem) = problem {
+            warn!(
+                cert_name,
+                ?domains,
+                status = ?last_status,
+                problem_detail = ?problem.detail,
+                problem_type = ?problem.r#type,
+                problem_status = ?problem.status,
+                "Order did not complete in time"
+            );
+        } else {
+            warn!(
+                cert_name,
+                ?domains,
+                status = ?last_status,
+                "Order did not complete in time"
+            );
+        }
+    }
+
+    fn log_challenge_errors(
+        cert_name: &str,
+        identifier: &Identifier,
+        challenges: &[Challenge],
+    ) -> bool {
+        let mut logged = false;
+
+        for challenge in challenges {
+            if let Some(problem) = &challenge.error {
+                logged = true;
+                error!(
+                    cert_name,
+                    identifier = ?identifier,
+                    challenge_type = ?challenge.r#type,
+                    challenge_status = ?challenge.status,
+                    problem_detail = ?problem.detail,
+                    problem_type = ?problem.r#type,
+                    problem_status = ?problem.status,
+                    "ACME challenge error reported"
+                );
+            }
+        }
+
+        logged
+    }
+
+    fn summarize_challenge_errors(challenges: &[Challenge]) -> Option<String> {
+        let mut summaries = Vec::new();
+
+        for challenge in challenges {
+            if let Some(problem) = &challenge.error {
+                summaries.push(Self::format_problem(problem));
+            }
+        }
+
+        if summaries.is_empty() {
+            None
+        } else {
+            Some(summaries.join("; "))
+        }
+    }
+
+    fn format_problem(problem: &Problem) -> String {
+        let detail = problem.detail.as_deref().unwrap_or("unknown detail");
+        let mut parts = vec![detail.to_string()];
+
+        if let Some(problem_type) = &problem.r#type {
+            parts.push(format!("type={problem_type}"));
+        }
+        if let Some(status) = problem.status {
+            parts.push(format!("status={status}"));
+        }
+
+        parts.join(", ")
     }
 
     /// Generate a CSR for the given domains
