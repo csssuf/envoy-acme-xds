@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, Notify, RwLock};
 use tracing::debug;
 use xds_api::pb::envoy::config::cluster::v3::Cluster;
 use xds_api::pb::envoy::config::listener::v3::Listener;
@@ -21,6 +22,10 @@ pub struct XdsState {
     secrets: RwLock<HashMap<String, Secret>>,
     /// Notify channel for subscribers when state changes
     notify: broadcast::Sender<u64>,
+    /// Tracks whether an LDS stream connection has been observed
+    lds_connected: AtomicBool,
+    /// Notify waiters when LDS connects
+    lds_notify: Notify,
 }
 
 impl XdsState {
@@ -32,6 +37,8 @@ impl XdsState {
             clusters: RwLock::new(Vec::new()),
             secrets: RwLock::new(HashMap::new()),
             notify,
+            lds_connected: AtomicBool::new(false),
+            lds_notify: Notify::new(),
         })
     }
 
@@ -59,6 +66,22 @@ impl XdsState {
     /// Used when challenges change but we want to trigger a rebuild
     pub fn notify_change(&self) {
         let _ = self.notify.send(0); // Version 0 signals rebuild needed
+    }
+
+    /// Mark the first LDS stream connection
+    pub fn mark_lds_connected(&self) {
+        if !self.lds_connected.swap(true, Ordering::SeqCst) {
+            self.lds_notify.notify_waiters();
+        }
+    }
+
+    /// Wait for an LDS stream connection to be observed
+    pub async fn wait_for_lds(&self) {
+        let notified = self.lds_notify.notified();
+        if self.lds_connected.load(Ordering::SeqCst) {
+            return;
+        }
+        notified.await;
     }
 
     /// Update listeners and bump version
@@ -116,6 +139,8 @@ impl Default for XdsState {
             clusters: RwLock::new(Vec::new()),
             secrets: RwLock::new(HashMap::new()),
             notify,
+            lds_connected: AtomicBool::new(false),
+            lds_notify: Notify::new(),
         }
     }
 }

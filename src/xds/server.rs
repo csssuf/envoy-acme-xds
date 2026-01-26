@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use tokio::net::UnixListener;
+use tokio::sync::oneshot;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::Server;
 use tracing::info;
@@ -36,6 +37,7 @@ impl XdsServer {
         socket_path: &Path,
         socket_permissions: u32,
         shutdown: impl std::future::Future<Output = ()>,
+        ready: Option<oneshot::Sender<()>>,
     ) -> Result<()> {
         // Remove existing socket file if it exists
         if socket_path.exists() {
@@ -61,6 +63,10 @@ impl XdsServer {
             permissions = format!("{:#o}", socket_permissions),
             "XDS server listening on Unix socket"
         );
+
+        if let Some(ready) = ready {
+            let _ = ready.send(());
+        }
 
         // Create services
         let lds_service = LdsService::new(self.state.clone());

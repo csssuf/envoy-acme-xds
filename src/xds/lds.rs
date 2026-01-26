@@ -63,6 +63,7 @@ impl ListenerDiscoveryService for LdsService {
         _request: Request<Streaming<DiscoveryRequest>>,
     ) -> Result<Response<Self::StreamListenersStream>, Status> {
         info!("New LDS stream connection");
+        self.state.mark_lds_connected();
 
         let state = self.state.clone();
         let mut rx = state.subscribe();

@@ -100,9 +100,6 @@ async fn run(config: Config) -> error::Result<()> {
         config.certificates.clone(),
     );
 
-    // Perform initial certificate issuance
-    renewal_manager.initial_issuance().await?;
-
     // Spawn background state updater (rebuilds listeners when challenges change)
     let state_updater_xds = xds_state.clone();
     let state_updater_challenges = challenge_state.clone();
@@ -125,11 +122,6 @@ async fn run(config: Config) -> error::Result<()> {
                 state_updater_xds.update_listeners(merged).await;
             }
         }
-    });
-
-    // Spawn renewal background task
-    tokio::spawn(async move {
-        renewal_manager.run(Duration::from_secs(3600)).await;
     });
 
     // Setup shutdown signal
@@ -156,14 +148,42 @@ async fn run(config: Config) -> error::Result<()> {
     };
 
     // Run XDS server
-    let server = XdsServer::new(xds_state);
-    server
-        .run(
-            &config.meta.socket_path,
-            config.meta.socket_permissions,
-            shutdown,
-        )
-        .await?;
+    let server = XdsServer::new(xds_state.clone());
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+    let server_handle = tokio::spawn(async move {
+        server
+            .run(
+                &config.meta.socket_path,
+                config.meta.socket_permissions,
+                shutdown,
+                Some(ready_tx),
+            )
+            .await
+    });
+
+    info!("Waiting for XDS server readiness");
+    ready_rx
+        .await
+        .map_err(|_| error::Error::Config("XDS server failed to signal readiness".to_string()))?;
+    info!("Waiting for LDS stream connection before issuing certificates");
+    xds_state.wait_for_lds().await;
+
+    // Perform initial certificate issuance
+    renewal_manager.initial_issuance().await?;
+
+    // Spawn renewal background task
+    tokio::spawn(async move {
+        renewal_manager.run(Duration::from_secs(3600)).await;
+    });
+
+    match server_handle.await {
+        Ok(result) => result?,
+        Err(e) => {
+            return Err(error::Error::Config(format!(
+                "XDS server task failed: {e}"
+            )))
+        }
+    }
 
     info!("Shutdown complete");
     Ok(())
