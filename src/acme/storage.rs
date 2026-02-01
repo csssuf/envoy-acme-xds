@@ -138,17 +138,24 @@ impl CertificateStorage {
 
 /// Parse expiry date from PEM certificate
 pub fn parse_certificate_expiry(pem: &str) -> Result<DateTime<Utc>> {
+    use x509_parser::error::{PEMError, X509Error};
     use x509_parser::prelude::*;
 
-    let (_, pem_block) = parse_x509_pem(pem.as_bytes())
-        .map_err(|e| Error::X509(format!("Failed to parse PEM: {:?}", e)))?;
+    let (_, pem_block) = parse_x509_pem(pem.as_bytes()).map_err(|e| {
+        let pem_error = match e {
+            x509_parser::nom::Err::Error(err) | x509_parser::nom::Err::Failure(err) => err,
+            x509_parser::nom::Err::Incomplete(_) => PEMError::IncompletePEM,
+        };
+        Error::X509Pem { source: pem_error }
+    })?;
 
-    let (_, cert) = X509Certificate::from_der(&pem_block.contents)
-        .map_err(|e| Error::X509(format!("Failed to parse certificate: {:?}", e)))?;
+    let (_, cert) =
+        X509Certificate::from_der(&pem_block.contents).map_err(|e| Error::X509Parse {
+            source: X509Error::from(e),
+        })?;
 
     let not_after = cert.validity().not_after;
     let timestamp = not_after.timestamp();
 
-    DateTime::from_timestamp(timestamp, 0)
-        .ok_or_else(|| Error::X509("Invalid timestamp".to_string()))
+    DateTime::from_timestamp(timestamp, 0).ok_or(Error::X509InvalidTimestamp)
 }

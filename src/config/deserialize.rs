@@ -37,8 +37,10 @@ pub fn deserialize_listener(value: &Value) -> Result<Listener> {
     let processed = process_listener_value(value)?;
 
     // Now deserialize using standard serde
-    serde_json::from_value(processed)
-        .map_err(|e| Error::Config(format!("Failed to deserialize listener: {}", e)))
+    serde_json::from_value(processed).map_err(|e| Error::ConfigDeserialize {
+        item: "Listener",
+        source: e,
+    })
 }
 
 /// Process a listener JSON value, converting typed_config fields from expanded to binary form
@@ -111,8 +113,11 @@ fn encode_downstream_tls_context(value: &Value) -> Result<Vec<u8>> {
     }
 
     // Deserialize to our minimal DownstreamTlsContext struct
-    let tls_context: DownstreamTlsContext = serde_json::from_value(v)
-        .map_err(|e| Error::Config(format!("Failed to deserialize DownstreamTlsContext: {}", e)))?;
+    let tls_context: DownstreamTlsContext =
+        serde_json::from_value(v).map_err(|e| Error::ConfigDeserialize {
+            item: "DownstreamTlsContext",
+            source: e,
+        })?;
 
     // Encode to protobuf bytes
     Ok(tls_context.encode_to_vec())
@@ -131,10 +136,10 @@ fn process_filter(filter: &mut Value) -> Result<()> {
                 encode_http_connection_manager(typed_config)?
             }
             _ => {
-                return Err(Error::Config(format!(
-                    "Unsupported type URL in typed_config: {}",
-                    type_url
-                )));
+                return Err(Error::ConfigUnsupportedTypeUrl {
+                    kind: "typed_config",
+                    type_url: type_url.to_string(),
+                });
             }
         };
 
@@ -174,10 +179,10 @@ fn encode_http_connection_manager(value: &Value) -> Result<Vec<u8>> {
                         encode_router(typed_config)?
                     }
                     _ => {
-                        return Err(Error::Config(format!(
-                            "Unsupported http_filter type: {}",
-                            type_url
-                        )));
+                        return Err(Error::ConfigUnsupportedTypeUrl {
+                            kind: "http_filter",
+                            type_url: type_url.to_string(),
+                        });
                     }
                 };
 
@@ -194,12 +199,11 @@ fn encode_http_connection_manager(value: &Value) -> Result<Vec<u8>> {
     }
 
     // Now deserialize to HttpConnectionManager
-    let hcm: HttpConnectionManager = serde_json::from_value(v).map_err(|e| {
-        Error::Config(format!(
-            "Failed to deserialize HttpConnectionManager: {}",
-            e
-        ))
-    })?;
+    let hcm: HttpConnectionManager =
+        serde_json::from_value(v).map_err(|e| Error::ConfigDeserialize {
+            item: "HttpConnectionManager",
+            source: e,
+        })?;
 
     Ok(hcm.encode_to_vec())
 }
@@ -212,8 +216,10 @@ fn encode_router(value: &Value) -> Result<Vec<u8>> {
         obj.remove("@type");
     }
 
-    let router: Router = serde_json::from_value(v)
-        .map_err(|e| Error::Config(format!("Failed to deserialize Router: {}", e)))?;
+    let router: Router = serde_json::from_value(v).map_err(|e| Error::ConfigDeserialize {
+        item: "Router",
+        source: e,
+    })?;
 
     Ok(router.encode_to_vec())
 }
@@ -223,8 +229,10 @@ pub fn deserialize_clusters(values: &[Value]) -> Result<Vec<Cluster>> {
     values
         .iter()
         .map(|v| {
-            serde_json::from_value(v.clone())
-                .map_err(|e| Error::Config(format!("Failed to deserialize cluster: {}", e)))
+            serde_json::from_value(v.clone()).map_err(|e| Error::ConfigDeserialize {
+                item: "Cluster",
+                source: e,
+            })
         })
         .collect()
 }

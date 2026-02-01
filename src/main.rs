@@ -166,7 +166,9 @@ async fn run(config: Config) -> error::Result<()> {
     info!("Waiting for XDS server readiness");
     ready_rx
         .await
-        .map_err(|_| error::Error::Config("XDS server failed to signal readiness".to_string()))?;
+        .map_err(|_| error::Error::ReadySignalFailed {
+            component: "xds server",
+        })?;
     info!("Waiting for LDS stream connection before issuing certificates");
     xds_state.wait_for_lds().await;
 
@@ -180,7 +182,12 @@ async fn run(config: Config) -> error::Result<()> {
 
     match server_handle.await {
         Ok(result) => result?,
-        Err(e) => return Err(error::Error::Config(format!("XDS server task failed: {e}"))),
+        Err(e) => {
+            return Err(error::Error::TaskJoin {
+                task: "xds server",
+                source: e,
+            });
+        }
     }
 
     info!("Shutdown complete");
