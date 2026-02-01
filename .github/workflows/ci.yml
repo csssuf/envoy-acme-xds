@@ -16,10 +16,13 @@ jobs:
           components: rustfmt, clippy
 
       - name: Format
+        if: always()
         run: cargo fmt -- --check
 
       - name: Lint
+        if: always()
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Test
+        if: always()
         run: cargo test
