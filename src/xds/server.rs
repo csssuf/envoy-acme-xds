@@ -11,7 +11,7 @@ use xds_api::pb::envoy::service::cluster::v3::cluster_discovery_service_server::
 use xds_api::pb::envoy::service::listener::v3::listener_discovery_service_server::ListenerDiscoveryServiceServer;
 use xds_api::pb::envoy::service::secret::v3::secret_discovery_service_server::SecretDiscoveryServiceServer;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 use super::cds::CdsService;
 use super::lds::LdsService;
@@ -41,20 +41,36 @@ impl XdsServer {
     ) -> Result<()> {
         // Remove existing socket file if it exists
         if socket_path.exists() {
-            std::fs::remove_file(socket_path)?;
+            std::fs::remove_file(socket_path).map_err(|e| Error::IoPath {
+                action: "remove existing socket",
+                path: socket_path.to_path_buf(),
+                source: e,
+            })?;
         }
 
         // Create parent directory if needed
         if let Some(parent) = socket_path.parent() {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent).map_err(|e| Error::IoPath {
+                action: "create socket parent directory",
+                path: parent.to_path_buf(),
+                source: e,
+            })?;
         }
 
         // Bind to Unix socket
-        let uds = UnixListener::bind(socket_path)?;
+        let uds = UnixListener::bind(socket_path).map_err(|e| Error::IoPath {
+            action: "bind unix socket",
+            path: socket_path.to_path_buf(),
+            source: e,
+        })?;
 
         // Set socket permissions to allow other processes to connect
         let permissions = std::fs::Permissions::from_mode(socket_permissions);
-        std::fs::set_permissions(socket_path, permissions)?;
+        std::fs::set_permissions(socket_path, permissions).map_err(|e| Error::IoPath {
+            action: "set socket permissions",
+            path: socket_path.to_path_buf(),
+            source: e,
+        })?;
 
         let uds_stream = UnixListenerStream::new(uds);
 
