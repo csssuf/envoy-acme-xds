@@ -13,8 +13,8 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use acme::{AcmeAccount, ChallengeState, CertificateStorage, RenewalManager};
-use config::{load_config, Config};
+use acme::{AcmeAccount, CertificateStorage, ChallengeState, RenewalManager};
+use config::{Config, load_config};
 use xds::{ConfigMerger, XdsServer, XdsState};
 
 #[tokio::main]
@@ -127,7 +127,9 @@ async fn run(config: Config) -> error::Result<()> {
     // Setup shutdown signal
     let shutdown = async {
         let ctrl_c = async {
-            signal::ctrl_c().await.expect("Failed to install Ctrl+C handler");
+            signal::ctrl_c()
+                .await
+                .expect("Failed to install Ctrl+C handler");
         };
 
         #[cfg(unix)]
@@ -178,11 +180,7 @@ async fn run(config: Config) -> error::Result<()> {
 
     match server_handle.await {
         Ok(result) => result?,
-        Err(e) => {
-            return Err(error::Error::Config(format!(
-                "XDS server task failed: {e}"
-            )))
-        }
+        Err(e) => return Err(error::Error::Config(format!("XDS server task failed: {e}"))),
     }
 
     info!("Shutdown complete");

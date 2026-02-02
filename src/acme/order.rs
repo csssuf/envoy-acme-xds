@@ -28,10 +28,8 @@ impl CertificateOrder {
         info!(cert_name, ?domains, "Starting certificate order");
 
         // Create order
-        let identifiers: Vec<Identifier> = domains
-            .iter()
-            .map(|d| Identifier::Dns(d.clone()))
-            .collect();
+        let identifiers: Vec<Identifier> =
+            domains.iter().map(|d| Identifier::Dns(d.clone())).collect();
 
         let mut order = account
             .new_order(&NewOrder {
@@ -61,10 +59,6 @@ impl CertificateOrder {
                             Error::ChallengeFailed("No HTTP-01 challenge available".to_string())
                         })?;
 
-                    let domain = match &authz.identifier {
-                        Identifier::Dns(d) => d.clone(),
-                    };
-
                     // Get key authorization
                     let key_auth = order.key_authorization(challenge);
 
@@ -72,7 +66,6 @@ impl CertificateOrder {
                     let active_challenge = ActiveChallenge {
                         token: challenge.token.clone(),
                         key_authorization: key_auth.as_str().to_string(),
-                        domain,
                         cert_name: cert_name.to_string(),
                     };
 
@@ -171,9 +164,7 @@ impl CertificateOrder {
                 }
                 OrderStatus::Invalid => {
                     Self::log_order_problem(cert_name, domains, error.as_ref());
-                    if let Err(err) =
-                        Self::log_authorization_problems(order, cert_name).await
-                    {
+                    if let Err(err) = Self::log_authorization_problems(order, cert_name).await {
                         warn!(
                             cert_name,
                             error = ?err,

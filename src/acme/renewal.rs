@@ -12,7 +12,7 @@ use crate::xds::XdsState;
 
 use super::challenge::ChallengeState;
 use super::order::CertificateOrder;
-use super::storage::{parse_certificate_expiry, CertificateStorage, StoredCert};
+use super::storage::{CertificateStorage, StoredCert, parse_certificate_expiry};
 
 /// Manages background certificate renewal
 pub struct RenewalManager {
@@ -113,7 +113,9 @@ impl RenewalManager {
 
         debug!(
             name,
-            days_until_expiry, threshold = self.renewal_threshold_days, "Certificate expiry check"
+            days_until_expiry,
+            threshold = self.renewal_threshold_days,
+            "Certificate expiry check"
         );
 
         Ok(days_until_expiry < self.renewal_threshold_days)
@@ -179,11 +181,7 @@ impl RenewalManager {
 
                     // Load into xDS state
                     self.xds_state
-                        .update_secret(
-                            &cert_config.name,
-                            cert.cert_chain_pem,
-                            cert.private_key_pem,
-                        )
+                        .update_secret(&cert_config.name, cert.cert_chain_pem, cert.private_key_pem)
                         .await;
                     continue;
                 }

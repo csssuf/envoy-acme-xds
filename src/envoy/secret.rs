@@ -1,7 +1,7 @@
-use xds_api::pb::envoy::config::core::v3::data_source::Specifier;
 use xds_api::pb::envoy::config::core::v3::DataSource;
+use xds_api::pb::envoy::config::core::v3::data_source::Specifier;
 use xds_api::pb::envoy::extensions::transport_sockets::tls::v3::{
-    secret::Type as SecretType, Secret, TlsCertificate,
+    Secret, TlsCertificate, secret::Type as SecretType,
 };
 
 /// Build a TLS secret for SDS

@@ -1,5 +1,5 @@
 use instant_acme::{Account, NewAccount};
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tracing::{info, warn};
 
 use crate::error::Result;

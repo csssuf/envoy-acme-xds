@@ -1,4 +1,3 @@
-mod cluster;
 mod listener;
 mod route;
 mod secret;

@@ -26,9 +26,6 @@ pub enum Error {
     #[error("X.509 parsing error: {0}")]
     X509(String),
 
-    #[error("Certificate not found: {0}")]
-    CertNotFound(String),
-
     #[error("Challenge failed: {0}")]
     ChallengeFailed(String),
 }

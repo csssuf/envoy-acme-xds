@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use tokio::sync::{broadcast, Notify, RwLock};
+use tokio::sync::{Notify, RwLock, broadcast};
 use tracing::debug;
 use xds_api::pb::envoy::config::cluster::v3::Cluster;
 use xds_api::pb::envoy::config::listener::v3::Listener;
@@ -122,11 +122,6 @@ impl XdsState {
     /// Get all current secrets
     pub async fn get_secrets(&self) -> Vec<Secret> {
         self.secrets.read().await.values().cloned().collect()
-    }
-
-    /// Get a specific secret by name
-    pub async fn get_secret(&self, name: &str) -> Option<Secret> {
-        self.secrets.read().await.get(name).cloned()
     }
 }
 
