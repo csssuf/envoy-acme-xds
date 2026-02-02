@@ -1,7 +1,8 @@
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use futures::stream;
 use tokio::net::UnixListener;
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::UnixListenerStream;
@@ -28,17 +29,49 @@ impl XdsServer {
         Self { state }
     }
 
-    /// Run the XDS server on a Unix domain socket
-    ///
-    /// The `socket_permissions` parameter specifies the Unix permissions for the socket file
-    /// (e.g., 0o777 for world-writable, allowing any process to connect).
+    /// Run the XDS server on one or more Unix domain sockets
     pub async fn run(
         self,
-        socket_path: &Path,
-        socket_permissions: u32,
+        listeners: Vec<UnixListener>,
+        cleanup_paths: Vec<PathBuf>,
         shutdown: impl std::future::Future<Output = ()>,
         ready: Option<oneshot::Sender<()>>,
     ) -> Result<()> {
+        let incoming = stream::select_all(
+            listeners
+                .into_iter()
+                .map(UnixListenerStream::new)
+                .collect::<Vec<_>>(),
+        );
+
+        if let Some(ready) = ready {
+            let _ = ready.send(());
+        }
+
+        // Create services
+        let lds_service = LdsService::new(self.state.clone());
+        let cds_service = CdsService::new(self.state.clone());
+        let sds_service = SdsService::new(self.state.clone());
+
+        // Build and run server
+        Server::builder()
+            .add_service(ListenerDiscoveryServiceServer::new(lds_service))
+            .add_service(ClusterDiscoveryServiceServer::new(cds_service))
+            .add_service(SecretDiscoveryServiceServer::new(sds_service))
+            .serve_with_incoming_shutdown(incoming, shutdown)
+            .await?;
+
+        // Clean up socket files created by this process
+        for socket_path in cleanup_paths {
+            if socket_path.exists() {
+                let _ = std::fs::remove_file(socket_path);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn bind_unix_socket(socket_path: &Path, socket_permissions: u32) -> Result<UnixListener> {
         // Remove existing socket file if it exists
         if socket_path.exists() {
             std::fs::remove_file(socket_path).map_err(|e| Error::IoPath {
@@ -72,36 +105,12 @@ impl XdsServer {
             source: e,
         })?;
 
-        let uds_stream = UnixListenerStream::new(uds);
-
         info!(
             path = %socket_path.display(),
             permissions = format!("{:#o}", socket_permissions),
             "XDS server listening on Unix socket"
         );
 
-        if let Some(ready) = ready {
-            let _ = ready.send(());
-        }
-
-        // Create services
-        let lds_service = LdsService::new(self.state.clone());
-        let cds_service = CdsService::new(self.state.clone());
-        let sds_service = SdsService::new(self.state.clone());
-
-        // Build and run server
-        Server::builder()
-            .add_service(ListenerDiscoveryServiceServer::new(lds_service))
-            .add_service(ClusterDiscoveryServiceServer::new(cds_service))
-            .add_service(SecretDiscoveryServiceServer::new(sds_service))
-            .serve_with_incoming_shutdown(uds_stream, shutdown)
-            .await?;
-
-        // Clean up socket file
-        if socket_path.exists() {
-            let _ = std::fs::remove_file(socket_path);
-        }
-
-        Ok(())
+        Ok(uds)
     }
 }

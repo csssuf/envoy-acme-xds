@@ -47,3 +47,6 @@ x509-parser = "0.16"
 # Async utilities
 async-stream = "0.3"
 futures = "0.3"
+
+# Systemd socket activation
+sd-listen-fds = "0.2"

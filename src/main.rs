@@ -2,6 +2,7 @@ mod acme;
 mod config;
 mod envoy;
 mod error;
+mod systemd;
 mod xds;
 
 use std::path::PathBuf;
@@ -54,9 +55,16 @@ async fn main() {
 }
 
 async fn run(config: Config) -> error::Result<()> {
+    let socket_path_log = config
+        .meta
+        .socket_path
+        .as_ref()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "<none>".to_string());
+
     info!(
         storage_dir = %config.meta.storage_dir.display(),
-        socket_path = %config.meta.socket_path.display(),
+        socket_path = %socket_path_log,
         acme_directory = %config.meta.acme_directory_url,
         num_certificates = config.certificates.len(),
         "Starting envoy-acme-xds"
@@ -149,17 +157,35 @@ async fn run(config: Config) -> error::Result<()> {
         }
     };
 
+    let mut listeners = Vec::new();
+    let mut cleanup_paths = Vec::new();
+
+    for socket in systemd::systemd_listeners()? {
+        info!(
+            name = socket.name.as_deref().unwrap_or("<unnamed>"),
+            "XDS server listening on systemd socket"
+        );
+        listeners.push(socket.listener);
+    }
+
+    if let Some(socket_path) = &config.meta.socket_path {
+        let listener = XdsServer::bind_unix_socket(socket_path, config.meta.socket_permissions)?;
+        listeners.push(listener);
+        cleanup_paths.push(socket_path.clone());
+    }
+
+    if listeners.is_empty() {
+        return Err(error::Error::Config(
+            "No socket_path configured and no systemd sockets were supplied".to_string(),
+        ));
+    }
+
     // Run XDS server
     let server = XdsServer::new(xds_state.clone());
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
     let server_handle = tokio::spawn(async move {
         server
-            .run(
-                &config.meta.socket_path,
-                config.meta.socket_permissions,
-                shutdown,
-                Some(ready_tx),
-            )
+            .run(listeners, cleanup_paths, shutdown, Some(ready_tx))
             .await
     });
 

@@ -60,7 +60,9 @@ fn validate_config(config: &Config) -> Result<()> {
     }
 
     // Validate meta config
-    if config.meta.socket_path.as_os_str().is_empty() {
+    if let Some(socket_path) = &config.meta.socket_path
+        && socket_path.as_os_str().is_empty()
+    {
         return Err(Error::Config("Socket path cannot be empty".to_string()));
     }
 
@@ -89,6 +91,25 @@ certificates:
     domains:
       - example.com
       - www.example.com
+
+envoy:
+  listeners: []
+  clusters: []
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_optional_socket_path() {
+        let yaml = r#"
+meta:
+  storage_dir: /tmp/test
+
+certificates:
+  - name: example
+    domains:
+      - example.com
 
 envoy:
   listeners: []

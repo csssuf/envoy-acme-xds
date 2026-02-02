@@ -10,7 +10,7 @@ meta:
   # Directory for storing ACME account credentials and certificates
   storage_dir: /var/lib/envoy-acme-xds
 
-  # Unix socket path for the XDS gRPC server
+  # Unix socket path for the XDS gRPC server (optional with systemd socket activation)
   socket_path: /var/run/envoy-xds.sock
 
   # ACME directory URL (uncomment for production)

@@ -20,8 +20,9 @@ pub struct MetaConfig {
     #[serde(default = "default_acme_directory")]
     pub acme_directory_url: String,
 
-    /// Unix socket path for xDS server
-    pub socket_path: PathBuf,
+    /// Unix socket path for xDS server (optional when using systemd socket activation)
+    #[serde(default)]
+    pub socket_path: Option<PathBuf>,
 
     /// Unix socket permissions in octal (e.g., 0o777 for world-writable)
     /// Defaults to 0o777 to allow any process to connect
