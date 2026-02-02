@@ -23,7 +23,9 @@ fn validate_config(config: &Config) -> Result<()> {
 
     for cert in &config.certificates {
         if cert.name.is_empty() {
-            return Err(Error::Config("Certificate name cannot be empty".to_string()));
+            return Err(Error::Config(
+                "Certificate name cannot be empty".to_string(),
+            ));
         }
         if cert.domains.is_empty() {
             return Err(Error::Config(format!(
@@ -42,7 +44,11 @@ fn validate_config(config: &Config) -> Result<()> {
     }
 
     // Check for duplicate certificate names
-    let mut names: Vec<&str> = config.certificates.iter().map(|c| c.name.as_str()).collect();
+    let mut names: Vec<&str> = config
+        .certificates
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
     names.sort();
     for window in names.windows(2) {
         if window[0] == window[1] {
@@ -59,7 +65,9 @@ fn validate_config(config: &Config) -> Result<()> {
     }
 
     if config.meta.storage_dir.as_os_str().is_empty() {
-        return Err(Error::Config("Storage directory cannot be empty".to_string()));
+        return Err(Error::Config(
+            "Storage directory cannot be empty".to_string(),
+        ));
     }
 
     Ok(())

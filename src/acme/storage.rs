@@ -179,5 +179,6 @@ pub fn parse_certificate_expiry(pem: &str) -> Result<DateTime<Utc>> {
     let not_after = cert.validity().not_after;
     let timestamp = not_after.timestamp();
 
-    DateTime::from_timestamp(timestamp, 0).ok_or_else(|| Error::X509("Invalid timestamp".to_string()))
+    DateTime::from_timestamp(timestamp, 0)
+        .ok_or_else(|| Error::X509("Invalid timestamp".to_string()))
 }

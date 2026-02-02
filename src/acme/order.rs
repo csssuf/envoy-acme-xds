@@ -28,10 +28,8 @@ impl CertificateOrder {
         info!(cert_name, ?domains, "Starting certificate order");
 
         // Create order
-        let identifiers: Vec<Identifier> = domains
-            .iter()
-            .map(|d| Identifier::Dns(d.clone()))
-            .collect();
+        let identifiers: Vec<Identifier> =
+            domains.iter().map(|d| Identifier::Dns(d.clone())).collect();
 
         let mut order = account
             .new_order(&NewOrder {
@@ -171,9 +169,7 @@ impl CertificateOrder {
                 }
                 OrderStatus::Invalid => {
                     Self::log_order_problem(cert_name, domains, error.as_ref());
-                    if let Err(err) =
-                        Self::log_authorization_problems(order, cert_name).await
-                    {
+                    if let Err(err) = Self::log_authorization_problems(order, cert_name).await {
                         warn!(
                             cert_name,
                             error = ?err,

@@ -2,23 +2,21 @@ use prost::Message;
 use tracing::debug;
 use xds_api::pb::envoy::config::cluster::v3::Cluster;
 use xds_api::pb::envoy::config::core::v3::{Address, SocketAddress};
-use xds_api::pb::envoy::config::listener::v3::{filter::ConfigType, Filter, FilterChain, Listener};
+use xds_api::pb::envoy::config::listener::v3::{Filter, FilterChain, Listener, filter::ConfigType};
 use xds_api::pb::envoy::config::route::v3::{Route, RouteConfiguration, VirtualHost};
 use xds_api::pb::envoy::extensions::filters::http::router::v3::Router;
 use xds_api::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
-    http_connection_manager::RouteSpecifier, http_filter, HttpConnectionManager, HttpFilter,
+    HttpConnectionManager, HttpFilter, http_connection_manager::RouteSpecifier, http_filter,
 };
 use xds_api::pb::google::protobuf::Any;
 
 use crate::acme::ChallengeState;
-use crate::config::{deserialize_clusters, deserialize_listener, EnvoyWorkloadConfig};
+use crate::config::{EnvoyWorkloadConfig, deserialize_clusters, deserialize_listener};
 use crate::envoy::{build_acme_challenge_route, listener_port};
 use crate::error::{Error, Result};
 
-const HTTP_CONNECTION_MANAGER_TYPE_URL: &str =
-    "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager";
-const ROUTER_TYPE_URL: &str =
-    "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router";
+const HTTP_CONNECTION_MANAGER_TYPE_URL: &str = "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager";
+const ROUTER_TYPE_URL: &str = "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router";
 
 /// Handles merging of workload config with ACME challenge routes
 pub struct ConfigMerger;
@@ -89,7 +87,8 @@ impl ConfigMerger {
         for filter_chain in &mut listener.filter_chains {
             for filter in &mut filter_chain.filters {
                 if filter.name == "envoy.filters.network.http_connection_manager" {
-                    if let Some(ConfigType::TypedConfig(ref mut typed_config)) = filter.config_type {
+                    if let Some(ConfigType::TypedConfig(ref mut typed_config)) = filter.config_type
+                    {
                         if typed_config.type_url == HTTP_CONNECTION_MANAGER_TYPE_URL {
                             // Decode HCM
                             if let Ok(mut hcm) =

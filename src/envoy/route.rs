@@ -1,7 +1,7 @@
-use xds_api::pb::envoy::config::core::v3::data_source::Specifier;
 use xds_api::pb::envoy::config::core::v3::DataSource;
+use xds_api::pb::envoy::config::core::v3::data_source::Specifier;
 use xds_api::pb::envoy::config::route::v3::{
-    route::Action, route_match::PathSpecifier, DirectResponseAction, Route, RouteMatch, VirtualHost,
+    DirectResponseAction, Route, RouteMatch, VirtualHost, route::Action, route_match::PathSpecifier,
 };
 
 use crate::acme::ChallengeState;

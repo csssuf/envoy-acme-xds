@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use tokio::sync::{broadcast, Notify, RwLock};
+use tokio::sync::{Notify, RwLock, broadcast};
 use tracing::debug;
 use xds_api::pb::envoy::config::cluster::v3::Cluster;
 use xds_api::pb::envoy::config::listener::v3::Listener;
