@@ -1,30 +1,4 @@
-use xds_api::pb::envoy::config::core::v3::{Address, SocketAddress};
-use xds_api::pb::envoy::config::listener::v3::{FilterChain, Listener};
-
-/// Build a basic listener with the given name, address, and filter chains
-pub fn build_listener(
-    name: &str,
-    address: &str,
-    port: u32,
-    filter_chains: Vec<FilterChain>,
-) -> Listener {
-    Listener {
-        name: name.to_string(),
-        address: Some(Address {
-            address: Some(xds_api::pb::envoy::config::core::v3::address::Address::SocketAddress(
-                SocketAddress {
-                    address: address.to_string(),
-                    port_specifier: Some(
-                        xds_api::pb::envoy::config::core::v3::socket_address::PortSpecifier::PortValue(port),
-                    ),
-                    ..Default::default()
-                },
-            )),
-        }),
-        filter_chains,
-        ..Default::default()
-    }
-}
+use xds_api::pb::envoy::config::listener::v3::Listener;
 
 /// Check if a listener is bound to a specific port
 pub fn listener_port(listener: &Listener) -> Option<u32> {

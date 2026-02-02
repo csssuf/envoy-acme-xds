@@ -79,25 +79,24 @@ fn process_filter_chain(filter_chain: &mut Value) -> Result<()> {
 
 /// Process transport_socket, converting DownstreamTlsContext from expanded to binary form
 fn process_transport_socket(socket: &mut Value) -> Result<()> {
-    if let Some(typed_config) = socket.get("typed_config") {
-        if let Some(type_url) = typed_config.get("@type").and_then(|v| v.as_str()) {
-            if type_url.contains("DownstreamTlsContext") {
-                let type_url_owned = type_url.to_string();
-                let name = socket.get("name").cloned();
+    if let Some(typed_config) = socket.get("typed_config")
+        && let Some(type_url) = typed_config.get("@type").and_then(|v| v.as_str())
+        && type_url.contains("DownstreamTlsContext")
+    {
+        let type_url_owned = type_url.to_string();
+        let name = socket.get("name").cloned();
 
-                // Encode DownstreamTlsContext to protobuf bytes
-                let encoded = encode_downstream_tls_context(typed_config)?;
+        // Encode DownstreamTlsContext to protobuf bytes
+        let encoded = encode_downstream_tls_context(typed_config)?;
 
-                // Replace with binary form
-                *socket = serde_json::json!({
-                    "name": name,
-                    "typed_config": {
-                        "type_url": type_url_owned,
-                        "value": encoded
-                    }
-                });
+        // Replace with binary form
+        *socket = serde_json::json!({
+            "name": name,
+            "typed_config": {
+                "type_url": type_url_owned,
+                "value": encoded
             }
-        }
+        });
     }
 
     Ok(())
@@ -121,33 +120,33 @@ fn encode_downstream_tls_context(value: &Value) -> Result<Vec<u8>> {
 
 /// Process a filter, converting typed_config from expanded to binary form
 fn process_filter(filter: &mut Value) -> Result<()> {
-    if let Some(typed_config) = filter.get("typed_config") {
-        if let Some(type_url) = typed_config.get("@type").and_then(|v| v.as_str()) {
-            let type_url_owned = type_url.to_string();
-            let name = filter.get("name").cloned();
+    if let Some(typed_config) = filter.get("typed_config")
+        && let Some(type_url) = typed_config.get("@type").and_then(|v| v.as_str())
+    {
+        let type_url_owned = type_url.to_string();
+        let name = filter.get("name").cloned();
 
-            let encoded = match type_url {
-                "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager" => {
-                    encode_http_connection_manager(typed_config)?
-                }
-                _ => {
-                    return Err(Error::Config(format!(
-                        "Unsupported type URL in typed_config: {}",
-                        type_url
-                    )));
-                }
-            };
+        let encoded = match type_url {
+            "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager" => {
+                encode_http_connection_manager(typed_config)?
+            }
+            _ => {
+                return Err(Error::Config(format!(
+                    "Unsupported type URL in typed_config: {}",
+                    type_url
+                )));
+            }
+        };
 
-            // Replace typed_config with binary form
-            // In JSON, oneof fields use the field name directly (typed_config), not wrapped
-            *filter = serde_json::json!({
-                "name": name,
-                "typed_config": {
-                    "type_url": type_url_owned,
-                    "value": encoded
-                }
-            });
-        }
+        // Replace typed_config with binary form
+        // In JSON, oneof fields use the field name directly (typed_config), not wrapped
+        *filter = serde_json::json!({
+            "name": name,
+            "typed_config": {
+                "type_url": type_url_owned,
+                "value": encoded
+            }
+        });
     }
 
     Ok(())
@@ -164,32 +163,32 @@ fn encode_http_connection_manager(value: &Value) -> Result<Vec<u8>> {
     // Process nested typed_config in http_filters
     if let Some(http_filters) = v.get_mut("http_filters").and_then(|v| v.as_array_mut()) {
         for filter in http_filters {
-            if let Some(typed_config) = filter.get("typed_config") {
-                if let Some(type_url) = typed_config.get("@type").and_then(|v| v.as_str()) {
-                    let type_url_owned = type_url.to_string();
-                    let name = filter.get("name").cloned();
+            if let Some(typed_config) = filter.get("typed_config")
+                && let Some(type_url) = typed_config.get("@type").and_then(|v| v.as_str())
+            {
+                let type_url_owned = type_url.to_string();
+                let name = filter.get("name").cloned();
 
-                    let encoded = match type_url {
-                        "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router" => {
-                            encode_router(typed_config)?
-                        }
-                        _ => {
-                            return Err(Error::Config(format!(
-                                "Unsupported http_filter type: {}",
-                                type_url
-                            )));
-                        }
-                    };
+                let encoded = match type_url {
+                    "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router" => {
+                        encode_router(typed_config)?
+                    }
+                    _ => {
+                        return Err(Error::Config(format!(
+                            "Unsupported http_filter type: {}",
+                            type_url
+                        )));
+                    }
+                };
 
-                    // HttpFilter uses typed_config directly, not wrapped in config_type
-                    *filter = serde_json::json!({
-                        "name": name,
-                        "typed_config": {
-                            "type_url": type_url_owned,
-                            "value": encoded
-                        }
-                    });
-                }
+                // HttpFilter uses typed_config directly, not wrapped in config_type
+                *filter = serde_json::json!({
+                    "name": name,
+                    "typed_config": {
+                        "type_url": type_url_owned,
+                        "value": encoded
+                    }
+                });
             }
         }
     }

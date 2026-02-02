@@ -134,36 +134,6 @@ impl CertificateStorage {
 
         Ok(())
     }
-
-    /// List all stored certificate names
-    pub async fn list_certificates(&self) -> Result<Vec<String>> {
-        let certs_dir = self.certs_dir();
-        if !certs_dir.exists() {
-            return Ok(Vec::new());
-        }
-
-        let mut names = Vec::new();
-        let mut entries = tokio::fs::read_dir(&certs_dir).await?;
-
-        while let Some(entry) = entries.next_entry().await? {
-            if entry.file_type().await?.is_dir() {
-                if let Some(name) = entry.file_name().to_str() {
-                    // Only include if it has the required files
-                    let cert_path = self.cert_path(name);
-                    if cert_path.exists() {
-                        names.push(name.to_string());
-                    }
-                }
-            }
-        }
-
-        Ok(names)
-    }
-
-    /// Check if a certificate exists in storage
-    pub async fn certificate_exists(&self, name: &str) -> bool {
-        self.cert_path(name).exists()
-    }
 }
 
 /// Parse expiry date from PEM certificate

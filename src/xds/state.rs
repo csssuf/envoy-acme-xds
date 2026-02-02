@@ -123,11 +123,6 @@ impl XdsState {
     pub async fn get_secrets(&self) -> Vec<Secret> {
         self.secrets.read().await.values().cloned().collect()
     }
-
-    /// Get a specific secret by name
-    pub async fn get_secret(&self, name: &str) -> Option<Secret> {
-        self.secrets.read().await.get(name).cloned()
-    }
 }
 
 impl Default for XdsState {

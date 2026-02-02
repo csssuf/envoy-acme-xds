@@ -8,7 +8,6 @@ use tokio::sync::RwLock;
 pub struct ActiveChallenge {
     pub token: String,
     pub key_authorization: String,
-    pub domain: String,
     pub cert_name: String,
 }
 
@@ -31,28 +30,10 @@ impl ChallengeState {
         state.insert(challenge.token.clone(), challenge);
     }
 
-    /// Remove a challenge by token
-    pub async fn remove(&self, token: &str) {
-        let mut state = self.inner.write().await;
-        state.remove(token);
-    }
-
     /// Get all active challenges
     pub async fn get_all(&self) -> Vec<ActiveChallenge> {
         let state = self.inner.read().await;
         state.values().cloned().collect()
-    }
-
-    /// Get a specific challenge by token
-    pub async fn get(&self, token: &str) -> Option<ActiveChallenge> {
-        let state = self.inner.read().await;
-        state.get(token).cloned()
-    }
-
-    /// Check if any challenges are active
-    pub async fn is_empty(&self) -> bool {
-        let state = self.inner.read().await;
-        state.is_empty()
     }
 
     /// Clear all challenges for a specific certificate

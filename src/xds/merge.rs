@@ -13,7 +13,7 @@ use xds_api::pb::google::protobuf::Any;
 use crate::acme::ChallengeState;
 use crate::config::{EnvoyWorkloadConfig, deserialize_clusters, deserialize_listener};
 use crate::envoy::{build_acme_challenge_route, listener_port};
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 const HTTP_CONNECTION_MANAGER_TYPE_URL: &str = "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager";
 const ROUTER_TYPE_URL: &str = "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router";
@@ -24,11 +24,7 @@ pub struct ConfigMerger;
 impl ConfigMerger {
     /// Parse workload listeners from JSON values
     pub fn parse_listeners(config: &EnvoyWorkloadConfig) -> Result<Vec<Listener>> {
-        config
-            .listeners
-            .iter()
-            .map(|v| deserialize_listener(v))
-            .collect()
+        config.listeners.iter().map(deserialize_listener).collect()
     }
 
     /// Parse workload clusters from JSON values
@@ -86,25 +82,23 @@ impl ConfigMerger {
 
         for filter_chain in &mut listener.filter_chains {
             for filter in &mut filter_chain.filters {
-                if filter.name == "envoy.filters.network.http_connection_manager" {
-                    if let Some(ConfigType::TypedConfig(ref mut typed_config)) = filter.config_type
+                if filter.name == "envoy.filters.network.http_connection_manager"
+                    && let Some(ConfigType::TypedConfig(ref mut typed_config)) = filter.config_type
+                    && typed_config.type_url == HTTP_CONNECTION_MANAGER_TYPE_URL
+                {
+                    // Decode HCM
+                    if let Ok(mut hcm) =
+                        HttpConnectionManager::decode(typed_config.value.as_slice())
                     {
-                        if typed_config.type_url == HTTP_CONNECTION_MANAGER_TYPE_URL {
-                            // Decode HCM
-                            if let Ok(mut hcm) =
-                                HttpConnectionManager::decode(typed_config.value.as_slice())
-                            {
-                                // Modify route config
-                                if let Some(RouteSpecifier::RouteConfig(ref mut route_config)) =
-                                    hcm.route_specifier
-                                {
-                                    Self::prepend_routes_to_route_config(route_config, &routes);
-                                }
-
-                                // Re-encode
-                                typed_config.value = hcm.encode_to_vec();
-                            }
+                        // Modify route config
+                        if let Some(RouteSpecifier::RouteConfig(ref mut route_config)) =
+                            hcm.route_specifier
+                        {
+                            Self::prepend_routes_to_route_config(route_config, &routes);
                         }
+
+                        // Re-encode
+                        typed_config.value = hcm.encode_to_vec();
                     }
                 }
             }
@@ -125,7 +119,7 @@ impl ConfigMerger {
             Some(vh) => {
                 // Prepend routes
                 let mut new_routes = routes.to_vec();
-                new_routes.extend(vh.routes.drain(..));
+                new_routes.append(&mut vh.routes);
                 vh.routes = new_routes;
             }
             None => {
