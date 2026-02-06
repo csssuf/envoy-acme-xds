@@ -1,0 +1,10 @@
+[Unit]
+Description=envoy-acme-xds socket
+
+[Socket]
+ListenStream=/var/lib/envoy-acme-xds/envoy-xds.sock
+SocketMode=0777
+Service=envoy-acme-xds.service
+
+[Install]
+WantedBy=sockets.target

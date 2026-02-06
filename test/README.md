@@ -18,6 +18,9 @@ This directory contains the configuration and scripts needed to run a fully cont
 # Run the full test suite
 ./test/run-test.sh
 
+# Run the systemd socket activation test
+./test/run-test.sh --systemd
+
 # Run tests and keep containers running for debugging
 ./test/run-test.sh --keep
 
@@ -193,6 +196,10 @@ test/
 ├── cleanup.sh             # Cleanup and reset script
 ├── verify-validation.sh   # Verification script for real ACME validation
 ├── xds-config.yaml        # XDS server configuration
+├── xds-config-systemd.yaml # XDS server config for systemd socket activation
+├── systemd/
+│   ├── envoy-acme-xds.service
+│   └── envoy-acme-xds.socket
 ├── envoy/
 │   └── envoy.yaml         # Envoy bootstrap configuration
 └── pebble/

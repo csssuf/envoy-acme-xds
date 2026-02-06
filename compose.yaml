@@ -35,8 +35,8 @@ services:
       - "site-b.example.com:172.28.0.10"
       - "api.example.com:172.28.0.10"
     volumes:
-      - ./test/pebble:/test/config:ro
-      - ./certificates:/test/certs:ro
+      - ./test/pebble:/test/config:ro,Z
+      - ./certificates:/test/certs:ro,z
     ports:
       - "14000:14000"  # ACME directory
       - "15000:15000"  # Management interface
@@ -52,8 +52,8 @@ services:
       dockerfile: Containerfile
     volumes:
       - xds-data:/var/lib/envoy-acme-xds
-      - ./test/xds-config.yaml:/etc/envoy-acme-xds/config.yaml:ro
-      - ./certificates/pebble-ca.pem:/etc/envoy-acme-xds/ca.pem:ro
+      - ./test/xds-config.yaml:/etc/envoy-acme-xds/config.yaml:ro,Z
+      - ./certificates/pebble-ca.pem:/etc/envoy-acme-xds/ca.pem:ro,z
     environment:
       RUST_LOG: "envoy_acme_xds=debug,tower=debug,tonic=debug,h2=debug,info"
     networks:
@@ -66,11 +66,12 @@ services:
   # Envoy proxy
   envoy:
     image: docker.io/envoyproxy/envoy:v1.32-latest
-    command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    entrypoint: ["envoy"]
+    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
     user: "0:0"  # Run as root to bind to privileged ports
     volumes:
       - xds-data:/var/lib/envoy-acme-xds
-      - ./test/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ./test/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro,Z
     ports:
       - "8080:5001"  # HTTP (for ACME challenges) - host:container
       - "8443:8443"  # HTTPS
