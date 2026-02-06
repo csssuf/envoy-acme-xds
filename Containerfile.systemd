@@ -1,0 +1,51 @@
+# Multi-stage build for envoy-acme-xds with systemd socket activation
+# Stage 1: Build dependencies and cache them
+FROM docker.io/rust:1.93-bookworm AS chef
+RUN cargo install cargo-chef
+WORKDIR /app
+
+# Stage 2: Prepare recipe (dependency manifest)
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Stage 3: Build dependencies (cached layer)
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Build the application
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo build --release
+
+# Stage 4: Runtime image with systemd
+FROM docker.io/debian:bookworm AS runtime
+ENV container=podman
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    systemd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories for config and data
+RUN mkdir -p \
+    /var/lib/envoy-acme-xds \
+    /var/run \
+    /etc/envoy-acme-xds \
+    /usr/local/share/ca-certificates \
+    /etc/systemd/system/sockets.target.wants
+
+# Copy the binary
+COPY --from=builder /app/target/release/envoy-acme-xds /usr/local/bin/envoy-acme-xds
+
+# Install systemd units
+COPY test/systemd/envoy-acme-xds.socket /etc/systemd/system/envoy-acme-xds.socket
+COPY test/systemd/envoy-acme-xds.service /etc/systemd/system/envoy-acme-xds.service
+
+# Enable socket activation
+RUN ln -s /etc/systemd/system/envoy-acme-xds.socket /etc/systemd/system/sockets.target.wants/envoy-acme-xds.socket
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/bin/systemd"]

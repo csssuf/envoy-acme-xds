@@ -27,6 +27,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse arguments
 KEEP_RUNNING=false
 REBUILD=false
+SYSTEMD_MODE=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --keep|-k)
@@ -37,12 +38,17 @@ while [[ $# -gt 0 ]]; do
             REBUILD=true
             shift
             ;;
+        --systemd|-s)
+            SYSTEMD_MODE=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  --keep, -k     Keep containers running after tests"
             echo "  --rebuild, -r  Force rebuild of containers"
+            echo "  --systemd, -s  Run systemd socket activation test"
             echo "  --help, -h     Show this help message"
             exit 0
             ;;
@@ -54,6 +60,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "${PROJECT_DIR}"
+
+COMPOSE_FILES=(-f compose.yaml)
+if [[ "${SYSTEMD_MODE}" == "true" ]]; then
+    COMPOSE_FILES+=(-f compose.systemd.yaml)
+fi
 
 # Step 1: Generate certificates if needed
 if [[ ! -f "${CERT_DIR}/pebble-ca.pem" ]]; then
@@ -70,7 +81,7 @@ if [[ "${REBUILD}" == "true" ]]; then
     BUILD_ARGS="--build"
 fi
 
-podman compose up -d ${BUILD_ARGS}
+podman compose "${COMPOSE_FILES[@]}" up -d ${BUILD_ARGS}
 
 # Step 3: Wait for services to be ready
 log_info "Waiting for services to be ready..."
@@ -138,6 +149,14 @@ run_test "Envoy has LDS listeners" \
 run_test "Envoy has CDS clusters" \
     'curl -sf http://localhost:9901/config_dump | grep -q "xds_cluster"'
 
+if [[ "${SYSTEMD_MODE}" == "true" ]]; then
+    run_test "Systemd socket active" \
+        'podman exec xds-server systemctl is-active envoy-acme-xds.socket | grep -q "active"'
+
+    run_test "Systemd service active" \
+        'podman exec xds-server systemctl is-active envoy-acme-xds.service | grep -q "active"'
+fi
+
 # Test: HTTP port is responding
 run_test "Envoy HTTP port" \
     'curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080/ 2>/dev/null | grep -qE "^(200|301|302|308)$"'
@@ -163,7 +182,7 @@ if [[ "${KEEP_RUNNING}" == "true" ]]; then
     echo "  - Pebble ACME:   https://localhost:14000/dir"
 else
     log_info "Stopping containers..."
-    podman compose down
+    podman compose "${COMPOSE_FILES[@]}" down
 fi
 
 # Exit with appropriate code

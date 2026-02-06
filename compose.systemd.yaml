@@ -1,0 +1,17 @@
+services:
+  xds-server:
+    build:
+      context: .
+      dockerfile: Containerfile.systemd
+    command: ["/bin/systemd"]
+    privileged: true
+    tmpfs:
+      - /run
+      - /tmp
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - xds-data:/var/lib/envoy-acme-xds
+      - ./test/xds-config-systemd.yaml:/etc/envoy-acme-xds/config.yaml:ro,Z
+      - ./certificates/pebble-ca.pem:/etc/envoy-acme-xds/ca.pem:ro,z
+    environment:
+      container: podman

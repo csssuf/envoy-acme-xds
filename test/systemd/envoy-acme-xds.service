@@ -1,0 +1,15 @@
+[Unit]
+Description=envoy-acme-xds service
+After=network.target
+Requires=envoy-acme-xds.socket
+
+[Service]
+Type=simple
+Environment=RUST_LOG=envoy_acme_xds=debug,tower=debug,tonic=debug,h2=debug,info
+ExecStartPre=/bin/sh -c 'if [ -f /etc/envoy-acme-xds/ca.pem ]; then cp /etc/envoy-acme-xds/ca.pem /usr/local/share/ca-certificates/custom-ca.crt && update-ca-certificates 2>/dev/null || true; fi'
+ExecStartPre=/bin/sh -c 'chown -R root:root /var/lib/envoy-acme-xds 2>/dev/null || true'
+ExecStart=/usr/local/bin/envoy-acme-xds /etc/envoy-acme-xds/config.yaml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 # Multi-stage build for envoy-acme-xds
 # Stage 1: Build dependencies and cache them
-FROM docker.io/rust:1.85-bookworm AS chef
+FROM docker.io/rust:1.93-bookworm AS chef
 RUN cargo install cargo-chef
 WORKDIR /app
 
