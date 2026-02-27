@@ -126,10 +126,10 @@ run_test() {
 
     if eval "$cmd"; then
         log_info "PASS: ${name}"
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_error "FAIL: ${name}"
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
 
