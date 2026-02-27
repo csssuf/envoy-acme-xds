@@ -31,6 +31,18 @@ struct CommonTlsContext {
     pub tls_certificate_sds_secret_configs: Vec<SdsSecretConfig>,
 }
 
+/// Minimal TcpProxy definition for deserialization
+/// xds-api v0.2.0 doesn't generate this type, so we define the minimal fields needed
+#[derive(Clone, Deserialize, Serialize, prost::Message)]
+struct TcpProxy {
+    #[prost(string, tag = "1")]
+    #[serde(default)]
+    pub stat_prefix: String,
+    #[prost(string, tag = "2")]
+    #[serde(default)]
+    pub cluster: String,
+}
+
 /// Deserialize a listener from JSON, handling typed_config fields with @type
 pub fn deserialize_listener(value: &Value) -> Result<Listener> {
     // First, process any typed_config fields to convert them from expanded to binary form
@@ -135,6 +147,9 @@ fn process_filter(filter: &mut Value) -> Result<()> {
             "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager" => {
                 encode_http_connection_manager(typed_config)?
             }
+            "type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy" => {
+                encode_tcp_proxy(typed_config)?
+            }
             _ => {
                 return Err(Error::ConfigUnsupportedTypeUrl {
                     kind: "typed_config",
@@ -222,6 +237,21 @@ fn encode_router(value: &Value) -> Result<Vec<u8>> {
     })?;
 
     Ok(router.encode_to_vec())
+}
+
+/// Encode TcpProxy from expanded JSON form to protobuf bytes
+fn encode_tcp_proxy(value: &Value) -> Result<Vec<u8>> {
+    let mut v = value.clone();
+    if let Some(obj) = v.as_object_mut() {
+        obj.remove("@type");
+    }
+
+    let tcp_proxy: TcpProxy = serde_json::from_value(v).map_err(|e| Error::ConfigDeserialize {
+        item: "TcpProxy",
+        source: e,
+    })?;
+
+    Ok(tcp_proxy.encode_to_vec())
 }
 
 /// Deserialize clusters from JSON values
