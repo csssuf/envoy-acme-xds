@@ -75,6 +75,7 @@ services:
     ports:
       - "8080:5001"  # HTTP (for ACME challenges) - host:container
       - "8443:8443"  # HTTPS
+      - "9000:9000"  # TCP proxy
       - "9901:9901"  # Admin interface
     networks:
       test-net:

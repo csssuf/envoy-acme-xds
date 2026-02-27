@@ -145,9 +145,17 @@ run_test "Envoy admin interface" \
 run_test "Envoy has LDS listeners" \
     'curl -sf http://localhost:9901/config_dump | grep -q "http_listener"'
 
-# Test: Envoy has clusters configured (from XDS)
+# Test: Envoy has CDS clusters configured (from XDS)
 run_test "Envoy has CDS clusters" \
     'curl -sf http://localhost:9901/config_dump | grep -q "xds_cluster"'
+
+# Test: Envoy has TCP proxy listener configured (from XDS)
+run_test "Envoy has TCP proxy listener" \
+    'curl -sf http://localhost:9901/config_dump | grep -q "tcp_listener"'
+
+# Test: Envoy has TCP upstream cluster configured (from XDS)
+run_test "Envoy has TCP upstream cluster" \
+    'curl -sf http://localhost:9901/config_dump | grep -q "tcp_upstream"'
 
 if [[ "${SYSTEMD_MODE}" == "true" ]]; then
     run_test "Systemd socket active" \

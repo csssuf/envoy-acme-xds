@@ -63,6 +63,21 @@ envoy:
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
+    # TCP proxy listener on port 9000 - exercises TcpProxy typed_config deserialization
+    # Proxies raw TCP traffic to the tcp_upstream cluster
+    - name: tcp_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 9000
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.tcp_proxy
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+                stat_prefix: tcp_passthrough
+                cluster: tcp_upstream
+
     # HTTPS listener on port 8443 with SNI-based routing
     # Note: Using 8443 instead of 443 to avoid requiring elevated privileges in rootless Podman
     - name: https_listener
@@ -204,4 +219,18 @@ envoy:
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
-  clusters: []
+  clusters:
+    # Upstream cluster for the TCP proxy listener
+    - name: tcp_upstream
+      type: STATIC
+      # FIXME: durations not supported
+      # connect_timeout: 5s
+      load_assignment:
+        cluster_name: tcp_upstream
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 127.0.0.1
+                      port_value: 9901
