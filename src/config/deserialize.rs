@@ -45,14 +45,85 @@ struct TcpProxy {
 
 /// Deserialize a listener from JSON, handling typed_config fields with @type
 pub fn deserialize_listener(value: &Value) -> Result<Listener> {
-    // First, process any typed_config fields to convert them from expanded to binary form
-    let processed = process_listener_value(value)?;
+    // Normalize google.protobuf.Duration strings ("5s", "1.5s") into {seconds, nanos}
+    // objects so nested serde deserialization accepts them anywhere they appear.
+    let mut value = value.clone();
+    convert_duration_strings(&mut value);
+
+    // Process any typed_config fields to convert them from expanded to binary form
+    let processed = process_listener_value(&value)?;
 
     // Now deserialize using standard serde
     serde_json::from_value(processed).map_err(|e| Error::ConfigDeserialize {
         item: "Listener",
         source: e,
     })
+}
+
+/// Recursively walk a JSON value and convert any string matching the
+/// `google.protobuf.Duration` canonical JSON form (e.g. "5s", "1.5s", "-0.25s")
+/// into the `{"seconds": N, "nanos": M}` form accepted by pbjson-generated
+/// deserializers.
+fn convert_duration_strings(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for v in map.values_mut() {
+                convert_duration_strings(v);
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr {
+                convert_duration_strings(v);
+            }
+        }
+        Value::String(s) => {
+            if let Some((seconds, nanos)) = parse_duration_string(s) {
+                *value = serde_json::json!({
+                    "seconds": seconds,
+                    "nanos": nanos,
+                });
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Parse a protobuf Duration JSON string. Returns (seconds, nanos) on success.
+/// Format: optional `-`, one or more digits, optional `.` + 1-9 digits, trailing `s`.
+fn parse_duration_string(s: &str) -> Option<(i64, i32)> {
+    let rest = s.strip_suffix('s')?;
+    let (negative, rest) = match rest.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
+    let (sec_str, frac_str, had_dot) = match rest.split_once('.') {
+        Some((a, b)) => (a, b, true),
+        None => (rest, "", false),
+    };
+    if sec_str.is_empty() || !sec_str.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if had_dot && (frac_str.is_empty() || frac_str.len() > 9) {
+        return None;
+    }
+    if !frac_str.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let mut seconds: i64 = sec_str.parse().ok()?;
+    let mut nanos: i32 = if frac_str.is_empty() {
+        0
+    } else {
+        let mut padded = String::from(frac_str);
+        while padded.len() < 9 {
+            padded.push('0');
+        }
+        padded.parse().ok()?
+    };
+    if negative {
+        seconds = seconds.checked_neg()?;
+        nanos = -nanos;
+    }
+    Some((seconds, nanos))
 }
 
 /// Process a listener JSON value, converting typed_config fields from expanded to binary form
@@ -259,10 +330,110 @@ pub fn deserialize_clusters(values: &[Value]) -> Result<Vec<Cluster>> {
     values
         .iter()
         .map(|v| {
-            serde_json::from_value(v.clone()).map_err(|e| Error::ConfigDeserialize {
+            let mut v = v.clone();
+            convert_duration_strings(&mut v);
+            serde_json::from_value(v).map_err(|e| Error::ConfigDeserialize {
                 item: "Cluster",
                 source: e,
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_integer_seconds() {
+        assert_eq!(parse_duration_string("5s"), Some((5, 0)));
+        assert_eq!(parse_duration_string("0s"), Some((0, 0)));
+        assert_eq!(parse_duration_string("300s"), Some((300, 0)));
+    }
+
+    #[test]
+    fn parses_fractional_seconds() {
+        assert_eq!(parse_duration_string("1.5s"), Some((1, 500_000_000)));
+        assert_eq!(parse_duration_string("0.25s"), Some((0, 250_000_000)));
+        assert_eq!(parse_duration_string("0.000000001s"), Some((0, 1)));
+    }
+
+    #[test]
+    fn parses_negative_duration() {
+        assert_eq!(parse_duration_string("-1s"), Some((-1, 0)));
+        assert_eq!(parse_duration_string("-1.5s"), Some((-1, -500_000_000)));
+    }
+
+    #[test]
+    fn rejects_non_duration_strings() {
+        assert_eq!(parse_duration_string("hello"), None);
+        assert_eq!(parse_duration_string("5"), None);
+        assert_eq!(parse_duration_string("s"), None);
+        assert_eq!(parse_duration_string("1ms"), None);
+        assert_eq!(parse_duration_string("1.s"), None);
+        assert_eq!(parse_duration_string(".5s"), None);
+        assert_eq!(parse_duration_string("1.1234567890s"), None);
+        assert_eq!(parse_duration_string("1 s"), None);
+    }
+
+    #[test]
+    fn converts_durations_in_nested_value() {
+        let mut v = serde_json::json!({
+            "name": "http_listener",
+            "stream_idle_timeout": "300s",
+            "nested": {
+                "request_timeout": "1.5s",
+                "untouched": "not-a-duration",
+            },
+            "list": ["5s", "hello"],
+        });
+        convert_duration_strings(&mut v);
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "name": "http_listener",
+                "stream_idle_timeout": {"seconds": 300, "nanos": 0},
+                "nested": {
+                    "request_timeout": {"seconds": 1, "nanos": 500_000_000},
+                    "untouched": "not-a-duration",
+                },
+                "list": [{"seconds": 5, "nanos": 0}, "hello"],
+            })
+        );
+    }
+
+    #[test]
+    fn deserialize_listener_accepts_duration_strings() {
+        let value = serde_json::json!({
+            "name": "http_listener",
+            "address": {
+                "socket_address": { "address": "0.0.0.0", "port_value": 80 }
+            },
+            "listener_filters_timeout": "15s",
+            "filter_chains": [{
+                "filters": [{
+                    "name": "envoy.filters.network.http_connection_manager",
+                    "typed_config": {
+                        "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                        "stat_prefix": "ingress_http",
+                        "stream_idle_timeout": "300s",
+                        "request_timeout": "1.5s",
+                        "http_filters": [{
+                            "name": "envoy.filters.http.router",
+                            "typed_config": {
+                                "@type": "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router"
+                            }
+                        }]
+                    }
+                }]
+            }]
+        });
+
+        let listener = deserialize_listener(&value).expect("listener deserializes");
+        let timeout = listener
+            .listener_filters_timeout
+            .expect("listener_filters_timeout present");
+        assert_eq!(timeout.seconds, 15);
+        assert_eq!(timeout.nanos, 0);
+    }
 }
